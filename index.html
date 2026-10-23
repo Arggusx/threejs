@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Ferrari 458 — Garagem 3D</title>
+		<link rel="stylesheet" href="./src/style.css">
+	</head>
+
+	<body>
+		<div id="container"></div>
+
+		<div id="loading">
+			<div class="loading-title">Carregando Ferrari 458 Italia…</div>
+			<div class="bar"><span id="loading-bar"></span></div>
+		</div>
+
+		<div id="hud">
+			<div class="speed"><span id="speed">0</span><small>km/h</small></div>
+			<div class="gear" id="gear">N</div>
+			<div class="status" id="status"></div>
+		</div>
+
+		<aside id="panel">
+			<header>
+				<h1>Ferrari 458 <span>Italia</span></h1>
+				<button id="panel-toggle" class="icon" title="Recolher painel">—</button>
+			</header>
+
+			<div class="panel-body">
+				<section>
+					<h2>Câmera <kbd>C</kbd></h2>
+					<div class="seg" data-option="camera">
+						<button data-value="orbit" class="active">Livre</button>
+						<button data-value="chase">Perseguição</button>
+						<button data-value="cockpit">Cockpit</button>
+					</div>
+				</section>
+
+				<section>
+					<h2>Ações</h2>
+					<div class="actions">
+						<button data-action="door-left">Porta esq. <kbd>Q</kbd></button>
+						<button data-action="door-right">Porta dir. <kbd>E</kbd></button>
+						<button data-action="garage" class="wide primary">Ir para a garagem <kbd>G</kbd></button>
+						<button data-action="lights">Faróis <kbd>L</kbd></button>
+						<button data-action="hazards">Pisca-alerta <kbd>H</kbd></button>
+					</div>
+				</section>
+
+				<section>
+					<h2>Pintura</h2>
+					<div class="swatches" data-option="paint">
+						<button data-value="#d40000" style="--c:#d40000" title="Rosso Corsa" class="active"></button>
+						<button data-value="#ffcc00" style="--c:#ffcc00" title="Giallo Modena"></button>
+						<button data-value="#0b0b0d" style="--c:#0b0b0d" title="Nero Daytona"></button>
+						<button data-value="#f2f2f0" style="--c:#f2f2f0" title="Bianco Avus"></button>
+						<button data-value="#1b3f8f" style="--c:#1b3f8f" title="Blu Pozzi"></button>
+						<button data-value="#1f5a3a" style="--c:#1f5a3a" title="Verde British"></button>
+						<button data-value="#8a8f96" style="--c:#8a8f96" title="Grigio Silverstone"></button>
+						<button data-value="#ff5a00" style="--c:#ff5a00" title="Arancio"></button>
+						<label class="custom" title="Cor personalizada"><input type="color" id="paint-custom" value="#d40000"></label>
+					</div>
+					<div class="seg small" data-option="finish">
+						<button data-value="metalico" class="active">Metálico</button>
+						<button data-value="solido">Sólido</button>
+						<button data-value="fosco">Fosco</button>
+						<button data-value="perolado">Perolado</button>
+						<button data-value="espelhado">Espelhado</button>
+					</div>
+				</section>
+
+				<section>
+					<h2>Peças</h2>
+
+					<label class="row-label">Rodas</label>
+					<div class="seg small" data-option="rims">
+						<button data-value="prata" class="active">Prata</button>
+						<button data-value="cromado">Cromo</button>
+						<button data-value="preto">Preto</button>
+						<button data-value="dourado">Dourado</button>
+						<button data-value="bronze">Bronze</button>
+					</div>
+
+					<label class="row-label">Pinças de freio</label>
+					<div class="swatches small" data-option="calipers">
+						<button data-value="#ffc400" style="--c:#ffc400" class="active"></button>
+						<button data-value="#c4001a" style="--c:#c4001a"></button>
+						<button data-value="#1e5bd8" style="--c:#1e5bd8"></button>
+						<button data-value="#222222" style="--c:#222222"></button>
+						<button data-value="#c0c4c8" style="--c:#c0c4c8"></button>
+					</div>
+
+					<label class="row-label">Aerofólio</label>
+					<div class="seg small" data-option="spoiler">
+						<button data-value="none" class="active">Nenhum</button>
+						<button data-value="lip">Lip</button>
+						<button data-value="gt">Asa GT</button>
+					</div>
+
+					<label class="row-label">Vidros</label>
+					<div class="seg small" data-option="glass">
+						<button data-value="transparente" class="active">Claro</button>
+						<button data-value="fume">Fumê</button>
+						<button data-value="escuro">Escuro</button>
+						<button data-value="azulado">Azulado</button>
+					</div>
+
+					<label class="row-label">Interior (couro)</label>
+					<div class="swatches small" data-option="interior">
+						<button data-value="#ffffff" style="--c:#c9a27a" class="active" title="Original"></button>
+						<button data-value="#2a2a2a" style="--c:#1b1b1b" title="Nero"></button>
+						<button data-value="#ff4d4d" style="--c:#a3171c" title="Rosso"></button>
+						<button data-value="#fff1d6" style="--c:#efe2c6" title="Crema"></button>
+						<button data-value="#6aa0ff" style="--c:#2c4d8a" title="Blu"></button>
+					</div>
+
+					<label class="row-label">Suspensão</label>
+					<div class="seg small" data-option="suspension">
+						<button data-value="rebaixada">Rebaixada</button>
+						<button data-value="padrao" class="active">Padrão</button>
+						<button data-value="elevada">Elevada</button>
+					</div>
+				</section>
+			</div>
+		</aside>
+
+		<div id="help">
+			<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / setas dirigir · <kbd>Espaço</kbd> freio de mão
+		</div>
+
+		<div id="toast"></div>
+
+		<script type="module" src="./src/main.js"></script>
+	</body>
+</html>
