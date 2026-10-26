@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<title>Ferrari 458 — Garagem 3D</title>
+		<title>Garagem 3D</title>
 		<link rel="stylesheet" href="./src/style.css">
 	</head>
 
@@ -11,7 +11,7 @@
 		<div id="container"></div>
 
 		<div id="loading">
-			<div class="loading-title">Carregando Ferrari 458 Italia…</div>
+			<div class="loading-title">Carregando carros…</div>
 			<div class="bar"><span id="loading-bar"></span></div>
 		</div>
 
@@ -23,11 +23,16 @@
 
 		<aside id="panel">
 			<header>
-				<h1>Ferrari 458 <span>Italia</span></h1>
+				<h1 id="car-title">Garagem 3D</h1>
 				<button id="panel-toggle" class="icon" title="Recolher painel">—</button>
 			</header>
 
 			<div class="panel-body">
+				<section>
+					<h2>Carro <kbd>T</kbd></h2>
+					<div class="seg" data-option="car"></div>
+				</section>
+
 				<section>
 					<h2>Câmera <kbd>C</kbd></h2>
 					<div class="seg" data-option="camera">
@@ -91,11 +96,13 @@
 						<button data-value="#c0c4c8" style="--c:#c0c4c8"></button>
 					</div>
 
-					<label class="row-label">Aerofólio</label>
-					<div class="seg small" data-option="spoiler">
-						<button data-value="none" class="active">Nenhum</button>
-						<button data-value="lip">Lip</button>
-						<button data-value="gt">Asa GT</button>
+					<div id="spoiler-options">
+						<label class="row-label">Aerofólio</label>
+						<div class="seg small" data-option="spoiler">
+							<button data-value="none" class="active">Nenhum</button>
+							<button data-value="lip">Lip</button>
+							<button data-value="gt">Asa GT</button>
+						</div>
 					</div>
 
 					<label class="row-label">Vidros</label>
@@ -126,7 +133,7 @@
 		</aside>
 
 		<div id="help">
-			<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / setas dirigir · <kbd>Espaço</kbd> freio de mão
+			<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / setas dirigir · <kbd>Espaço</kbd> freio de mão · clique em outro carro para dirigi-lo
 		</div>
 
 		<div id="toast"></div>

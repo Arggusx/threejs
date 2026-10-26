@@ -235,6 +235,27 @@ section > .seg.small:first-of-type { margin-top: 0; }
 
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+
+/* Nome flutuando sobre os carros estacionados (clique para dirigir) */
+.car-label {
+	position: fixed;
+	left: 0;
+	top: 0;
+	padding: 5px 11px;
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	font-size: 12px;
+	white-space: nowrap;
+	cursor: pointer;
+	user-select: none;
+	transition: border-color 0.15s;
+}
+
+.car-label:hover { border-color: var(--accent); }
+.car-label small { color: var(--muted); margin-left: 6px; }
+.car-label[hidden] { display: none; }
+
 @media (max-width: 700px) {
 	#panel { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 48%; border-radius: 14px 14px 0 0; }
 	#hud { bottom: auto; top: 60px; left: 16px; }

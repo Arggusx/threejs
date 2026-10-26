@@ -1,30 +1,17 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { animate, ease } from './tween.js';
+import { animate, ease } from '../utils/tween.js';
 
-// Geometria do modelo (unidades em metros, frente do carro apontando para -Z)
-const WHEELBASE = 2.65;
-const WHEEL_RADIUS = 0.36;
+// Carro genérico: física, portas, luzes e personalização. O que muda de um modelo 3D
+// para outro (nomes das peças, pivôs, medidas) fica em ./models/.
+// Unidades em metros, frente do carro apontando para -Z.
+
 const MAX_STEER = 0.6;
 const MAX_SPEED = 75; // m/s (~270 km/h)
 const MAX_REVERSE = 8;
 const MAX_AUTOPILOT_YAW_RATE = 1.2; // rad/s
-
-// Região (no espaço do carro) que define cada porta. Os triângulos cujo centro
-// cai dentro dela são recortados da carroceria e presos a uma dobradiça.
-export const DOOR_REGION = { xMin: 0.6, zMin: - 0.72, zMax: 0.6, yMin: 0.3, yMax: 1.0 };
 const DOOR_ANGLE = THREE.MathUtils.degToRad( 65 );
-
-// Pontos do contorno do carro usados para colisão
-const HULL = [];
-for ( let i = 0; i <= 4; i ++ ) for ( let j = 0; j <= 8; j ++ ) {
-
-	// só o perímetro: 5 pontos na largura × 9 no comprimento
-	if ( i > 0 && i < 4 && j > 0 && j < 8 ) continue;
-	HULL.push( new THREE.Vector2( - 0.98 + i * 0.49, - 2.25 + j * 0.5625 ) );
-
-}
 
 export const PAINT_FINISHES = {
 	metalico: { metalness: 1, roughness: 0.5, clearcoat: 1, clearcoatRoughness: 0.03, iridescence: 0 },
@@ -51,12 +38,25 @@ export const GLASS_TINTS = {
 
 export const SUSPENSION = { padrao: 0, rebaixada: - 0.04, elevada: 0.06 };
 
+// Valores iniciais das opções do painel (cada modelo pode sobrescrever em `defaults`)
+export const DEFAULT_SETTINGS = {
+	paint: '#d40000', finish: 'metalico', rims: 'prata', calipers: '#ffc400',
+	spoiler: 'none', glass: 'transparente', interior: '#ffffff', suspension: 'padrao',
+};
+
+const draco = new DRACOLoader().setDecoderPath( './draco/' );
+const loader = new GLTFLoader().setDRACOLoader( draco );
+const shadowTexture = new THREE.TextureLoader().loadAsync( './textures/car_shadow_ao.png' );
+
 export class Car {
 
-	constructor() {
+	constructor( model ) {
+
+		this.model = model;
+		this.settings = { ...DEFAULT_SETTINGS, ...model.defaults };
 
 		this.object = new THREE.Group(); // posição/rotação no mundo
-		this.object.name = 'car';
+		this.object.name = model.id;
 
 		this.speed = 0; // m/s, positivo = para frente
 		this.steer = 0;
@@ -74,8 +74,18 @@ export class Car {
 		this._prevSpeed = 0;
 		this._time = 0;
 
+		// Pontos do contorno do carro usados para colisão: só o perímetro, 5 na largura × 9 no comprimento
+		const w = model.halfWidth, l = model.halfLength;
+		this.hull = [];
+		for ( let i = 0; i <= 4; i ++ ) for ( let j = 0; j <= 8; j ++ ) {
+
+			if ( i > 0 && i < 4 && j > 0 && j < 8 ) continue;
+			this.hull.push( new THREE.Vector2( - w + i * w / 2, - l + j * l / 4 ) );
+
+		}
+
 		this.materials = {
-			body: new THREE.MeshPhysicalMaterial( { color: 0xd40000, ...PAINT_FINISHES.metalico, iridescenceIOR: 1.8 } ),
+			body: new THREE.MeshPhysicalMaterial( { color: this.settings.paint, ...PAINT_FINISHES.metalico, iridescenceIOR: 1.8 } ),
 			details: new THREE.MeshStandardMaterial( { color: 0xffffff, metalness: 1, roughness: 0.5 } ),
 			rims: new THREE.MeshStandardMaterial( { ...RIM_FINISHES.prata } ),
 			glass: new THREE.MeshPhysicalMaterial( { color: 0xffffff, metalness: 0.25, roughness: 0, transmission: 1 } ),
@@ -85,40 +95,27 @@ export class Car {
 
 	}
 
+	get name() {
+
+		return this.model.name;
+
+	}
+
 	async load( onProgress ) {
 
-		const draco = new DRACOLoader();
-		draco.setDecoderPath( './draco/' );
-
-		const loader = new GLTFLoader();
-		loader.setDRACOLoader( draco );
-
 		const [ gltf, shadowMap ] = await Promise.all( [
-			loader.loadAsync( './models/ferrari.glb', ( e ) => e.total && onProgress?.( e.loaded / e.total ) ),
-			new THREE.TextureLoader().loadAsync( './models/ferrari_ao.png' ),
+			loader.loadAsync( this.model.url, ( e ) => e.total && onProgress?.( e.loaded / e.total ) ),
+			shadowTexture,
 		] );
 
-		const root = gltf.scene.children[ 0 ];
-		this.root = root;
-		this.object.add( root );
+		// O modelo monta root, chassis, rodas, volante, portas, materiais e bounds
+		this.model.build( this, gltf );
+		this.interiorBase = this.materials.leather.color.clone();
 
-		// Tudo que não é roda vai para o "chassi", que pode inclinar e mudar de altura
-		this.chassis = new THREE.Group();
-		this.chassis.name = 'chassis';
-		root.add( this.chassis );
-		this.chassis.attach( root.getObjectByName( 'main' ) );
-		this.chassis.attach( root.getObjectByName( 'steering_wheel' ) );
-
-		this.applyMaterials();
-		this.setupWheels();
-		root.updateMatrixWorld( true );
-
-		this.bounds = new THREE.Box3().setFromObject( root.getObjectByName( 'body' ) );
-		this.setupDoors();
 		this.setupLights();
-		this.setupSpoilers();
+		if ( this.model.spoilers ) this.setupSpoilers();
 
-		root.traverse( ( o ) => {
+		this.root.traverse( ( o ) => {
 
 			if ( o.isMesh ) {
 
@@ -129,122 +126,35 @@ export class Car {
 
 		} );
 
-		// Sombra de oclusão ambiente do exemplo original
+		// Sombra de oclusão ambiente do exemplo original, esticada para o tamanho do carro
 		const shadow = new THREE.Mesh(
-			new THREE.PlaneGeometry( 0.655 * 4, 1.3 * 4 ),
+			new THREE.PlaneGeometry( ...this.model.shadowSize ),
 			new THREE.MeshBasicMaterial( { map: shadowMap, blending: THREE.MultiplyBlending, toneMapped: false, transparent: true, premultipliedAlpha: true } )
 		);
 		shadow.rotation.x = - Math.PI / 2;
 		shadow.position.y = 0.002;
 		shadow.renderOrder = 2;
-		root.add( shadow );
+		this.root.add( shadow );
+
+		// Caixa invisível e leve, usada para clicar no carro e selecioná-lo
+		const size = this.bounds.getSize( new THREE.Vector3() );
+		this.hitBox = new THREE.Mesh( new THREE.BoxGeometry( size.x, size.y, size.z ), new THREE.MeshBasicMaterial( { visible: false } ) );
+		this.bounds.getCenter( this.hitBox.position );
+		this.hitBox.userData.car = this;
+		this.chassis.add( this.hitBox );
 
 		return this;
 
 	}
 
-	applyMaterials() {
+	// Chave de animação única por carro (as animações de um carro não cancelam as do outro)
+	key( name ) {
 
-		const get = ( name ) => this.root.getObjectByName( name );
-		const m = this.materials;
-
-		get( 'body' ).material = m.body;
-		get( 'trim' ).material = m.details;
-		get( 'glass' ).material = m.glass;
-		for ( const w of [ 'fl', 'fr', 'rl', 'rr' ] ) get( `rim_${ w }` ).material = m.rims;
-
-		// Materiais originais que vamos modificar: cloná-los evita efeitos colaterais
-		const leather = get( 'leather' );
-		leather.material = leather.material.clone();
-		m.leather = leather.material;
-		get( 'steering_leather' ).material = m.leather;
-
-		const lights = get( 'lights' );
-		lights.material = lights.material.clone();
-		m.headlights = lights.material;
-
-		const tail = get( 'lights_red' );
-		tail.material = tail.material.clone();
-		m.taillights = tail.material;
-
-		const leds = get( 'leds' );
-		leds.material = leds.material.clone();
-		m.leds = leds.material;
-
-	}
-
-	setupWheels() {
-
-		// Cada roda ganha um pivô para poder esterçar (Y) independentemente do giro (X)
-		this.wheels = [];
-		this.frontPivots = [];
-
-		for ( const id of [ 'fl', 'fr', 'rl', 'rr' ] ) {
-
-			const wheel = this.root.getObjectByName( `wheel_${ id }` );
-			const pivot = new THREE.Group();
-			pivot.position.copy( wheel.position );
-			this.root.add( pivot );
-			pivot.add( wheel );
-			wheel.position.set( 0, 0, 0 );
-
-			this.wheels.push( wheel );
-			if ( id[ 0 ] === 'f' ) this.frontPivots.push( pivot );
-
-			// Pinça de freio: um arco preso ao pivô (esterça com a roda, mas não gira)
-			const caliper = new THREE.Mesh( new THREE.TorusGeometry( 0.19, 0.038, 8, 16, 1 ), this.materials.caliper );
-			caliper.rotation.set( 0, Math.PI / 2, 0 );
-			caliper.rotateZ( THREE.MathUtils.degToRad( 121 ) );
-			caliper.scale.z = 0.9;
-			caliper.position.x = ( id[ 1 ] === 'l' ? - 1 : 1 ) * 0.045;
-			pivot.add( caliper );
-
-		}
-
-		this.steeringWheel = this.root.getObjectByName( 'steering_wheel' );
-		this.steeringBase = this.steeringWheel.quaternion.clone();
+		return `${ this.model.id }-${ name }`;
 
 	}
 
 	// ---------------------------------------------------------------- portas
-
-	setupDoors() {
-
-		const main = this.root.getObjectByName( 'main' );
-		const rootInv = this.root.matrixWorld.clone().invert();
-		const r = DOOR_REGION;
-
-		this.doorPivots = {};
-
-		for ( const [ side, sign ] of [ [ 'left', - 1 ], [ 'right', 1 ] ] ) {
-
-			const hinge = new THREE.Vector3( sign * 0.92, 0, r.zMin );
-			const pivot = new THREE.Group();
-			pivot.name = `door_${ side }`;
-			pivot.position.copy( hinge );
-			this.chassis.add( pivot );
-			this.doorPivots[ side ] = pivot;
-
-			const inDoor = ( p ) => sign * p.x > r.xMin && p.z > r.zMin && p.z < r.zMax && p.y > r.yMin && p.y < r.yMax;
-
-			for ( const mesh of [ ...main.children ] ) {
-
-				if ( ! mesh.isMesh ) continue;
-
-				const matrix = new THREE.Matrix4().multiplyMatrices( rootInv, mesh.matrixWorld );
-				const doorGeometry = splitGeometry( mesh, matrix, inDoor );
-				if ( ! doorGeometry ) continue;
-
-				doorGeometry.translate( - hinge.x, - hinge.y, - hinge.z );
-				const part = new THREE.Mesh( doorGeometry, mesh.material );
-				part.name = `${ mesh.name }_door_${ side }`;
-				pivot.add( part );
-
-			}
-
-		}
-
-	}
 
 	isDoorOpen( side ) {
 
@@ -261,7 +171,7 @@ export class Car {
 		const pivot = this.doorPivots[ side ];
 
 		return animate( {
-			key: `door-${ side }`, from, to,
+			key: this.key( `door-${ side }` ), from, to,
 			duration: 1.1 * Math.abs( to - from ),
 			easing: open ? ease.out : ease.inOut,
 			onUpdate: ( v ) => {
@@ -292,12 +202,13 @@ export class Car {
 	setupLights() {
 
 		const b = this.bounds;
+		const h = this.model.headlight;
 		this.headlights = [];
 
 		for ( const sign of [ - 1, 1 ] ) {
 
 			const light = new THREE.SpotLight( 0xfff4e0, 0, 40, THREE.MathUtils.degToRad( 26 ), 0.45, 1.2 );
-			light.position.set( sign * 0.62, 0.62, b.min.z + 0.35 );
+			light.position.set( sign * h.x, h.y, b.min.z + h.inset );
 			light.target.position.set( sign * 0.9, 0, b.min.z - 14 );
 			light.castShadow = false;
 			this.chassis.add( light, light.target );
@@ -322,7 +233,7 @@ export class Car {
 		m.leds.emissive.set( 0xffffff );
 
 		animate( {
-			key: 'headlights', from: on ? 0 : 1, to: on ? 1 : 0, duration: 0.25,
+			key: this.key( 'headlights' ), from: on ? 0 : 1, to: on ? 1 : 0, duration: 0.25,
 			onUpdate: ( v ) => {
 
 				for ( const l of this.headlights ) l.intensity = v * 60;
@@ -344,12 +255,11 @@ export class Car {
 	setupSpoilers() {
 
 		const b = this.bounds;
-		const body = this.root.getObjectByName( 'body' );
 
 		// Descobre a altura da tampa traseira com um raio vindo de cima
 		const deckZ = b.max.z - 0.38;
 		const ray = new THREE.Raycaster( new THREE.Vector3( 0, 5, deckZ ), new THREE.Vector3( 0, - 1, 0 ) );
-		const hit = ray.intersectObject( body, false )[ 0 ];
+		const hit = ray.intersectObject( this.bodyMesh, false )[ 0 ];
 		const deckY = hit ? hit.point.y : b.max.y - 0.25;
 
 		const carbon = this.materials.carbon;
@@ -399,12 +309,14 @@ export class Car {
 
 	setSpoiler( type ) {
 
+		if ( ! this.spoilers ) return;
+
 		for ( const [ name, obj ] of Object.entries( this.spoilers ) ) {
 
 			if ( name === type && ! obj.visible ) {
 
 				obj.visible = true;
-				animate( { key: `spoiler-${ name }`, from: 0.01, to: 1, duration: 0.6, easing: ease.outBack, onUpdate: ( v ) => obj.scale.setScalar( v ) } );
+				animate( { key: this.key( `spoiler-${ name }` ), from: 0.01, to: 1, duration: 0.6, easing: ease.outBack, onUpdate: ( v ) => obj.scale.setScalar( v ) } );
 
 			} else if ( name !== type ) {
 
@@ -420,7 +332,7 @@ export class Car {
 
 		const target = new THREE.Color( color );
 		const start = this.materials.body.color.clone();
-		animate( { key: 'paint', duration: 0.6, onUpdate: ( v ) => this.materials.body.color.lerpColors( start, target, v ) } );
+		animate( { key: this.key( 'paint' ), duration: 0.6, onUpdate: ( v ) => this.materials.body.color.lerpColors( start, target, v ) } );
 
 	}
 
@@ -455,13 +367,15 @@ export class Car {
 
 	setInterior( color ) {
 
-		this.materials.leather.color.set( color );
+		// "Original" (branco) volta à cor de fábrica do banco
+		const c = new THREE.Color( color );
+		this.materials.leather.color.copy( c.equals( new THREE.Color( 0xffffff ) ) ? this.interiorBase : c.multiplyScalar( this.model.interiorTint ) );
 
 	}
 
 	setSuspension( name ) {
 
-		animate( { key: 'suspension', from: this.rideHeight, to: SUSPENSION[ name ], duration: 0.8, easing: ease.outBack, onUpdate: ( v ) => ( this.rideHeight = v ) } );
+		animate( { key: this.key( 'suspension' ), from: this.rideHeight, to: SUSPENSION[ name ], duration: 0.8, easing: ease.outBack, onUpdate: ( v ) => ( this.rideHeight = v ) } );
 
 	}
 
@@ -546,7 +460,7 @@ export class Car {
 		this.speed = Math.abs( this.speed ) <= decel ? 0 : this.speed - Math.sign( this.speed ) * decel;
 
 		// Limita o esterço para que a aceleração lateral não passe de ~1.2 g
-		const steerLimit = Math.min( MAX_STEER, Math.atan( 12 * WHEELBASE / Math.max( this.speed * this.speed, 1e-3 ) ) );
+		const steerLimit = Math.min( MAX_STEER, Math.atan( 12 * this.model.wheelbase / Math.max( this.speed * this.speed, 1e-3 ) ) );
 		const target = input.steer * steerLimit;
 		this.steer += THREE.MathUtils.clamp( target - this.steer, - 2.5 * dt, 2.5 * dt );
 
@@ -567,7 +481,7 @@ export class Car {
 			// Se já estava sobrepondo algo (ex.: portão fechou em cima do carro), deixa sair
 			const wasColliding = this.collides( colliders );
 
-			this.object.rotation.y += ( this.speed * Math.tan( this.steer ) / WHEELBASE ) * h;
+			this.object.rotation.y += ( this.speed * Math.tan( this.steer ) / this.model.wheelbase ) * h;
 			pos.addScaledVector( this.forward( dir ), this.speed * h );
 
 			if ( ! wasColliding && this.collides( colliders ) ) {
@@ -591,7 +505,7 @@ export class Car {
 		const s = Math.sin( this.yaw ), c = Math.cos( this.yaw );
 		const p = new THREE.Vector2();
 
-		for ( const h of HULL ) {
+		for ( const h of this.hull ) {
 
 			p.set( this.position.x + h.x * c + h.y * s, this.position.z - h.x * s + h.y * c );
 			for ( const box of colliders ) if ( box.containsPoint( p ) ) return true;
@@ -599,6 +513,17 @@ export class Car {
 		}
 
 		return false;
+
+	}
+
+	// Retângulo (alinhado aos eixos) que o carro ocupa no chão; serve de obstáculo para os outros carros
+	footprint( target = new THREE.Box2() ) {
+
+		const s = Math.abs( Math.sin( this.yaw ) ), c = Math.abs( Math.cos( this.yaw ) );
+		const w = this.model.halfWidth, l = this.model.halfLength;
+		const half = new THREE.Vector2( w * c + l * s, w * s + l * c );
+		const center = new THREE.Vector2( this.position.x, this.position.z );
+		return target.set( center.clone().sub( half ), center.add( half ) );
 
 	}
 
@@ -648,7 +573,7 @@ export class Car {
 
 		if ( v > 0.2 && dt > 0 ) {
 
-			const targetSteer = THREE.MathUtils.clamp( Math.atan( ( dYaw / dt ) * WHEELBASE / this.speed ), - MAX_STEER, MAX_STEER );
+			const targetSteer = THREE.MathUtils.clamp( Math.atan( ( dYaw / dt ) * this.model.wheelbase / this.speed ), - MAX_STEER, MAX_STEER );
 			this.steer += ( targetSteer - this.steer ) * Math.min( 1, dt * 8 );
 
 		}
@@ -667,7 +592,7 @@ export class Car {
 	updateVisuals( dt ) {
 
 		// Giro das rodas
-		this.wheelSpin -= this.speed * dt / WHEEL_RADIUS;
+		this.wheelSpin -= this.speed * dt / this.model.wheelRadius;
 		for ( const w of this.wheels ) w.rotation.x = this.wheelSpin;
 		for ( const p of this.frontPivots ) p.rotation.y = this.steer;
 
@@ -678,7 +603,7 @@ export class Car {
 
 		// Inclinação da carroceria por aceleração lateral/longitudinal
 		const longAccel = dt > 0 ? ( this.speed - this._prevSpeed ) / dt : 0;
-		const latAccel = this.speed * this.speed * Math.tan( this.steer ) / WHEELBASE;
+		const latAccel = this.speed * this.speed * Math.tan( this.steer ) / this.model.wheelbase;
 		this._prevSpeed = this.speed;
 
 		const k = Math.min( 1, dt * 5 );
@@ -697,53 +622,13 @@ export class Car {
 		const blink = this.hazardsOn && Math.floor( this._time * 2.5 ) % 2 === 0;
 		m.leds.emissive.set( blink ? 0xff8a00 : 0xffffff );
 		m.leds.emissiveIntensity = blink ? 6 : this.headlightsOn ? 2 : 0;
+		if ( m.rearLeds ) {
+
+			m.rearLeds.emissive.set( 0xff8a00 );
+			m.rearLeds.emissiveIntensity = blink ? 6 : 0;
+
+		}
 
 	}
-
-}
-
-// Separa os triângulos de `mesh` que satisfazem `test` (no espaço dado por `matrix`).
-// A malha original fica com o restante; retorna os triângulos removidos já
-// transformados para esse espaço, ou null se nenhum triângulo foi selecionado.
-function splitGeometry( mesh, matrix, test ) {
-
-	const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
-	const pos = source.attributes.position;
-	const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-	const keep = [], take = [];
-
-	for ( let t = 0; t < pos.count / 3; t ++ ) {
-
-		a.fromBufferAttribute( pos, t * 3 ).applyMatrix4( matrix );
-		b.fromBufferAttribute( pos, t * 3 + 1 ).applyMatrix4( matrix );
-		c.fromBufferAttribute( pos, t * 3 + 2 ).applyMatrix4( matrix );
-		a.add( b ).add( c ).divideScalar( 3 );
-		( test( a ) ? take : keep ).push( t );
-
-	}
-
-	if ( take.length === 0 ) return null;
-
-	mesh.geometry = pickTriangles( source, keep );
-	return pickTriangles( source, take ).applyMatrix4( matrix );
-
-}
-
-function pickTriangles( geometry, triangles ) {
-
-	const out = new THREE.BufferGeometry();
-
-	for ( const [ name, attr ] of Object.entries( geometry.attributes ) ) {
-
-		const size = attr.itemSize;
-		const stride = 3 * size;
-		const array = new attr.array.constructor( triangles.length * stride );
-
-		triangles.forEach( ( t, i ) => array.set( attr.array.subarray( t * stride, t * stride + stride ), i * stride ) );
-		out.setAttribute( name, new THREE.BufferAttribute( array, size, attr.normalized ) );
-
-	}
-
-	return out;
 
 }
