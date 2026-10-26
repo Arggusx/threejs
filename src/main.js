@@ -10,8 +10,6 @@ import { VAI_TEIA } from './character/vaiTeia.js';
 import { Garage } from './world/garage.js';
 import { animate, ease, updateTweens, wait } from './utils/tween.js';
 
-// ---------------------------------------------------------------- renderer / cena
-
 const container = document.getElementById( 'container' );
 
 const renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -42,7 +40,6 @@ controls.minDistance = 2.5;
 controls.maxPolarAngle = THREE.MathUtils.degToRad( 88 );
 controls.target.set( 0, 0.5, 0 );
 
-// Sol com sombras (acompanha o carro para manter a resolução da sombra)
 const sun = new THREE.DirectionalLight( 0xfff0dd, 1.6 );
 sun.castShadow = true;
 sun.shadow.mapSize.set( 2048, 2048 );
@@ -52,7 +49,6 @@ sun.shadow.camera.far = 80;
 sun.shadow.bias = - 0.0004;
 scene.add( sun, sun.target );
 
-// Chão
 const ground = new THREE.Mesh(
 	new THREE.PlaneGeometry( 600, 600 ),
 	new THREE.MeshStandardMaterial( { color: 0x3b3e44, roughness: 0.95 } )
@@ -68,7 +64,6 @@ grid.material.depthWrite = false;
 grid.position.y = 0.003;
 scene.add( grid );
 
-// Garagem + acesso de concreto
 const garage = new Garage();
 scene.add( garage.object );
 
@@ -83,7 +78,6 @@ scene.add( driveway );
 
 addCones();
 
-// Limites do mundo
 const worldLimit = 280;
 const worldBounds = [
 	new THREE.Box2( new THREE.Vector2( - 400, - 400 ), new THREE.Vector2( 400, - worldLimit ) ),
@@ -92,9 +86,6 @@ const worldBounds = [
 	new THREE.Box2( new THREE.Vector2( worldLimit, - 400 ), new THREE.Vector2( 400, 400 ) ),
 ];
 
-// ---------------------------------------------------------------- carros
-
-// Todos os carros ficam no mundo; só o selecionado (`car`) recebe os comandos
 const START = {
 	porsche: { position: new THREE.Vector3( 0, 0, 0 ), yaw: 0 },
 	ferrari: { position: new THREE.Vector3( - 4.5, 0, 0 ), yaw: 0 },
@@ -113,13 +104,11 @@ const cars = Object.values( CAR_MODELS ).map( ( model ) => {
 
 let car = cars.find( ( c ) => c.model.id === 'porsche' ) ?? cars[ 0 ];
 
-// Homem-Aranha: começa a pé, ao lado dos carros. Entra/sai de um carro com F.
 const hero = new Character( spiderman );
 hero.object.position.set( 2.4, 0, 3.2 );
 scene.add( hero.object );
 let onFoot = true;
 
-// Quem recebe os comandos agora: o personagem ou o carro em que ele está
 const controlled = () => ( onFoot ? hero : car );
 
 const loadingBar = document.getElementById( 'loading-bar' );
@@ -134,6 +123,7 @@ Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
 } ) ) ).then( () => {
 
 	for ( const c of cars ) createCarLabel( c );
+	setQuality( QUALITY[ savedQuality ] ? savedQuality : 'alto' );
 	syncPanel();
 	setCameraMode( cameraMode );
 	document.getElementById( 'loading' ).classList.add( 'done' );
@@ -145,8 +135,6 @@ Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
 	document.querySelector( '.loading-title' ).textContent = 'Erro ao carregar o modelo: ' + err.message;
 
 } );
-
-// ---------------------------------------------------------------- entrada
 
 const keys = new Set();
 const input = { throttle: 0, brake: 0, steer: 0, handbrake: false, run: false };
@@ -192,8 +180,6 @@ function readInput() {
 
 }
 
-// Comandos do personagem. Na câmera livre o movimento é relativo à câmera; nas outras,
-// W/S andam para a frente/trás e A/D giram (como um carro)
 const heroInput = { move: new THREE.Vector3(), turn: 0, run: false, jump: false, lockFacing: false };
 
 function readHeroInput() {
@@ -222,8 +208,6 @@ function readHeroInput() {
 	return heroInput;
 
 }
-
-// ---------------------------------------------------------------- câmera
 
 const CAMERA_MODES = [ 'orbit', 'chase', 'cockpit' ];
 let cameraMode = 'orbit';
@@ -258,7 +242,6 @@ function updateCamera( dt ) {
 
 	if ( cameraMode === 'orbit' ) {
 
-		// A câmera livre "anda junto" com o carro
 		camera.position.add( delta );
 		controls.target.add( delta );
 		controls.update();
@@ -271,7 +254,6 @@ function updateCamera( dt ) {
 
 	} else if ( onFoot ) {
 
-		// Primeira pessoa: olhos do personagem
 		const eye = hero.eyePosition( new THREE.Vector3() );
 		camera.position.copy( eye );
 		camera.lookAt( eye.addScaledVector( hero.forward(), 5 ).setY( eye.y - 0.4 ) );
@@ -285,15 +267,13 @@ function updateCamera( dt ) {
 
 	} else {
 
-		const eye = car.model.cockpitEye; // olhos do motorista (espaço do chassi)
+		const eye = car.model.cockpitEye;
 		camera.position.copy( car.chassis.localToWorld( eye.clone() ) );
 		camera.lookAt( car.chassis.localToWorld( new THREE.Vector3( eye.x, 0.95, - 5 ) ) );
 
 	}
 
 }
-
-// ---------------------------------------------------------------- ações
 
 let busy = false;
 
@@ -352,7 +332,6 @@ function toggleDoor( side ) {
 
 }
 
-// A pé, G abre/fecha o portão (e acende/apaga a luz) — senão daria para ficar preso lá dentro
 function toggleGarageDoor() {
 
 	const open = ! garage.doorTarget;
@@ -361,28 +340,25 @@ function toggleGarageDoor() {
 
 }
 
-// ---------------------------------------------------------------- coreografias com áudio (dança, "vai teia")
-
 const ROUTINES = {
 	dance: { routine: DANCE, audio: new Audio( './audio/spiderman-dance.mp3' ) },
 	web: { routine: VAI_TEIA, audio: new Audio( './audio/vai-teia.wav' ) },
 };
 for ( const r of Object.values( ROUTINES ) ) r.audio.preload = 'auto';
-let playing = null; // nome da coreografia tocando
+let playing = null;
 
 function playRoutine( name ) {
 
 	if ( ! onFoot || busy ) return;
 	const was = playing;
 	if ( hero.dancing ) hero.stopDance();
-	if ( was === name || ! hero.grounded ) return; // a mesma tecla de novo só para
+	if ( was === name || ! hero.grounded ) return;
 
 	const { routine, audio } = ROUTINES[ name ];
 	audio.currentTime = 0;
 	const started = performance.now();
 	audio.play().catch( () => {} );
 	playing = name;
-	// O relógio da animação é o tempo do áudio (se ele não tocar, ou já tiver acabado, usa o relógio do navegador)
 	hero.startDance( () => ( audio.paused ? ( performance.now() - started ) / 1000 : audio.currentTime ), routine );
 	setActiveAction( name, true );
 
@@ -398,10 +374,6 @@ hero.onDanceEnd = () => {
 
 hero.onRoutineEvent = ( name ) => name === 'web' && shootWeb();
 
-// ---------------------------------------------------------------- teia
-
-// Fio de teia saindo do pulso direito na direção para onde ele aponta. Para no primeiro obstáculo
-// (carro, garagem) ou a 30 m; cresce rápido, fica um pouco e some.
 const webMaterial = new THREE.MeshStandardMaterial( { color: 0xf4f4f4, roughness: 0.6, emissive: 0x666666, transparent: true } );
 const webRay = new THREE.Raycaster();
 let webCount = 0;
@@ -409,7 +381,6 @@ let webCount = 0;
 function shootWeb() {
 
 	const from = hero.bones.RightHand.getWorldPosition( new THREE.Vector3() );
-	// Na direção do antebraço (para onde o braço esticado aponta), quase na horizontal
 	const elbow = hero.bones.RightForeArm.getWorldPosition( new THREE.Vector3() );
 	const dir = from.clone().sub( elbow ).setY( 0 ).normalize().setY( 0.05 ).normalize();
 
@@ -421,10 +392,9 @@ function shootWeb() {
 	const web = new THREE.Group();
 	const strand = new THREE.Mesh( new THREE.CylinderGeometry( 0.012, 0.012, 1, 6 ), webMaterial.clone() );
 	strand.rotation.x = Math.PI / 2;
-	strand.position.z = 0.5; // a base do cilindro na origem, crescendo em +Z local
+	strand.position.z = 0.5;
 	web.add( strand );
 
-	// "Gota" de teia na ponta
 	const blob = new THREE.Mesh( new THREE.IcosahedronGeometry( 0.06, 1 ), strand.material );
 	web.add( blob );
 
@@ -436,7 +406,7 @@ function shootWeb() {
 		key: `web-${ ++ webCount }`, from: 0, to: 1, duration: 1.4, easing: ease.linear,
 		onUpdate: ( v ) => {
 
-			const grow = Math.min( 1, v / 0.12 ); // ~0,17 s para chegar ao alvo
+			const grow = Math.min( 1, v / 0.12 );
 			web.scale.set( 1, 1, Math.max( grow * length, 0.01 ) );
 			blob.scale.set( 1, 1, 1 / Math.max( grow * length, 0.01 ) );
 			blob.position.z = 1;
@@ -454,9 +424,6 @@ function shootWeb() {
 
 }
 
-// ---------------------------------------------------------------- entrar / sair do carro
-
-// Carro mais próximo ao alcance do personagem (ou null)
 function nearestCar() {
 
 	let best = null, bestDistance = Infinity;
@@ -477,7 +444,6 @@ function nearestCar() {
 
 }
 
-// Pontos do aro do volante (no mundo) onde ficam as mãos: "9h15", girando junto com o volante
 const GRIP_RADIUS = 0.17;
 
 function steeringGrip() {
@@ -490,8 +456,6 @@ function steeringGrip() {
 
 }
 
-// Onde fica o quadril do motorista (espaço do chassi). Procura o encosto e o assento do banco com
-// raios a partir dos olhos do cockpit, para o corpo não atravessar o banco.
 const seatRay = new THREE.Raycaster();
 
 function seatPosition( c ) {
@@ -521,7 +485,6 @@ function enterCar( next ) {
 
 	return runSequence( `Entrando: ${ next.model.name }…`, async () => {
 
-		// Perto do carro: abre a porta do motorista, entra e fecha. Longe (pelo painel): só aparece lá dentro
 		const near = hero.position.distanceTo( next.position ) < next.model.halfLength + 2;
 		if ( near && ! next.isDoorOpen( 'left' ) ) await next.setDoor( 'left', true );
 
@@ -547,7 +510,6 @@ function exitCar() {
 
 		await car.setDoor( 'left', true );
 
-		// Aparece ao lado da porta do motorista (ou do passageiro, se ali estiver bloqueado)
 		const blockers = [ ...garage.colliders, ...worldBounds, ...cars.filter( ( c ) => c !== car ).map( ( c ) => c.footprint() ) ];
 		const spot = new THREE.Vector3();
 		let yaw = car.yaw + Math.PI / 2;
@@ -555,7 +517,7 @@ function exitCar() {
 
 			spot.copy( car.object.localToWorld( new THREE.Vector3( side * ( car.model.halfWidth + 0.55 ), 0, 0.1 ) ) ).setY( 0 );
 			yaw = car.yaw + side * - Math.PI / 2;
-			hero.position.copy( spot ); // só para testar a colisão nesse ponto
+			hero.position.copy( spot );
 			if ( ! hero.collides( blockers ) ) break;
 
 		}
@@ -599,7 +561,6 @@ function goToGarage() {
 		garage.setLight( true );
 		await garage.setDoor( true );
 
-		// Se o carro está de frente para uma parede da garagem, primeiro dá ré para ganhar espaço
 		const ahead = car.position.clone().addScaledVector( car.forward(), 3 );
 		const facingDoor = Math.abs( car.position.x - garage.entrance.x ) < 2 && car.forward().z < - 0.7 && car.position.z > garage.entrance.z;
 		if ( garage.isNear( ahead, 1.5 ) && ! facingDoor ) {
@@ -626,7 +587,6 @@ function leaveGarage() {
 		await closeCarDoors();
 		await garage.setDoor( true );
 
-		// Sai de frente se estiver estacionado de frente para o portão; senão, de ré
 		const forward = car.forward();
 		const reverse = forward.z < 0;
 		const travel = reverse ? forward.negate() : forward;
@@ -636,15 +596,12 @@ function leaveGarage() {
 
 		await car.followPath( bezier( car.position.clone(), travel, exit, exitDir, 3, 3 ), { maxSpeed: 3, reverse } );
 
-		// Só apaga a luz se ninguém reabriu o portão enquanto ele fechava
 		garage.setDoor( false ).then( ( finished ) => finished && garage.setLight( false ) );
 
 	} );
 
 }
 
-// Curva de Bézier cúbica que sai de `p0` na direção `t0` e chega em `p1` na direção `t1`.
-// As tangentes nas pontas são exatamente essas direções, então o carro nunca "gira no lugar".
 function bezier( p0, t0, p1, t1, d0, d1 ) {
 
 	return new THREE.CubicBezierCurve3(
@@ -656,9 +613,6 @@ function bezier( p0, t0, p1, t1, d0, d1 ) {
 
 }
 
-// Adiciona um trecho de (from, fromDir) até (to, toDir). Se o alvo estiver atrás do carro,
-// faz antes um retorno em "U" — sem isso a Bézier pode degenerar numa linha que vai e volta,
-// e o carro giraria 180° de uma vez.
 function addLeg( path, from, fromDir, to, toDir, maxLead = 10 ) {
 
 	const span = ( a, b ) => THREE.MathUtils.clamp( a.distanceTo( b ) * 0.4, 1, 10 );
@@ -681,18 +635,16 @@ function addLeg( path, from, fromDir, to, toDir, maxLead = 10 ) {
 
 }
 
-// Rota da posição atual até a vaga. Retorna { path, reverse }.
 function routeToGarage() {
 
 	const p = car.position.clone();
 	const h = car.forward();
 	const e = garage.entrance;
 	const park = garage.parkSpot.clone();
-	const inward = new THREE.Vector3( 0, 0, - 1 ); // sentido de quem entra na garagem
-	const staging = new THREE.Vector3( e.x, 0, e.z + 9 ); // ponto alinhado com o portão
+	const inward = new THREE.Vector3( 0, 0, - 1 );
+	const staging = new THREE.Vector3( e.x, 0, e.z + 9 );
 	const span = ( a, b ) => THREE.MathUtils.clamp( a.distanceTo( b ) * 0.4, 1, 10 );
 
-	// Já no corredor em frente ao portão e alinhado: entra direto (de frente ou de ré)
 	const inCorridor = Math.abs( p.x - e.x ) < 2 && p.z > e.z - 0.5 && p.z < staging.z + 1;
 
 	if ( inCorridor && h.z < - 0.7 ) {
@@ -711,15 +663,12 @@ function routeToGarage() {
 
 	if ( p.z < e.z + 1 ) {
 
-		// Atrás ou ao lado da garagem: contorna pela lateral até a frente
 		const side = p.x >= e.x ? 1 : - 1;
 		const around = new THREE.Vector3( e.x + side * 10, 0, e.z + 2 );
 		const north = new THREE.Vector3( 0, 0, 1 );
 
 		if ( p.z < garage.object.position.z ) {
 
-			// Atrás da garagem: primeiro anda de lado até sair da "sombra" dela,
-			// com pouca entrada na direção atual (que pode estar apontando para a parede)
 			const sideways = new THREE.Vector3( side, 0, 0 );
 			const corner = new THREE.Vector3( e.x + side * Math.max( 10, Math.abs( p.x - e.x ) + 4 ), 0, p.z );
 			addLeg( path, p, h, corner, sideways, 3 );
@@ -768,8 +717,6 @@ async function closeCarDoors() {
 
 }
 
-// ---------------------------------------------------------------- seleção de carro
-
 function selectCar( next ) {
 
 	if ( next === hero ) {
@@ -803,7 +750,6 @@ function selectCar( next ) {
 
 }
 
-// Deixa o painel com os valores do carro selecionado
 function syncPanel() {
 
 	document.getElementById( 'panel' ).classList.toggle( 'on-foot', onFoot );
@@ -829,7 +775,6 @@ function syncPanel() {
 
 }
 
-// Clique em um carro do mundo para dirigi-lo (só conta se o mouse não arrastou a câmera)
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let pointerDown = null;
@@ -866,7 +811,6 @@ renderer.domElement.addEventListener( 'pointermove', ( e ) => {
 
 } );
 
-// Etiqueta com o nome sobre cada carro estacionado
 const labelPosition = new THREE.Vector3();
 
 function createCarLabel( c ) {
@@ -876,7 +820,7 @@ function createCarLabel( c ) {
 	el.innerHTML = `${ c.model.name } ${ c.model.subtitle }<small></small>`;
 	el.hidden = true;
 	el.addEventListener( 'click', () => selectCar( c ) );
-	container.after( el ); // logo depois do canvas, para ficar por baixo do painel e do HUD
+	container.after( el );
 	c.label = el;
 
 }
@@ -907,9 +851,6 @@ function updateCarLabels() {
 
 }
 
-// ---------------------------------------------------------------- UI
-
-// Botões de seleção de carro, gerados a partir dos modelos disponíveis
 const carOptions = document.querySelector( '[data-option="car"]' );
 for ( const c of [ hero, ...cars ] ) {
 
@@ -923,6 +864,17 @@ for ( const c of [ hero, ...cars ] ) {
 const optionHandlers = {
 	car: ( v ) => selectCar( [ hero, ...cars ].find( ( c ) => c.model.id === v ) ),
 	camera: setCameraMode,
+	quality: ( v ) => {
+
+		perf.auto = false;
+		setQuality( v );
+		try {
+
+			localStorage.setItem( 'quality', v );
+
+		} catch {}
+
+	},
 	paint: ( v ) => {
 
 		car.setPaint( v );
@@ -946,7 +898,7 @@ document.querySelectorAll( '[data-option]' ).forEach( ( group ) => {
 		const option = group.dataset.option;
 		setActive( option, button.dataset.value );
 		optionHandlers[ option ]( button.dataset.value );
-		if ( option === 'car' ) setActive( 'car', controlled().model.id ); // a troca pode ter sido recusada
+		if ( option === 'car' ) setActive( 'car', controlled().model.id );
 		else if ( option in car.settings ) car.settings[ option ] = button.dataset.value;
 		button.blur();
 
@@ -1039,8 +991,6 @@ function updateHUD() {
 
 }
 
-// ---------------------------------------------------------------- cenário
-
 function addCones() {
 
 	const orange = new THREE.MeshStandardMaterial( { color: 0xff5a00, roughness: 0.6 } );
@@ -1049,25 +999,10 @@ function addCones() {
 	const stripeGeo = new THREE.CylinderGeometry( 0.088, 0.115, 0.1, 16 );
 	const baseGeo = new THREE.BoxGeometry( 0.4, 0.04, 0.4 );
 
-	const place = ( x, z ) => {
+	const spots = [];
+	const place = ( x, z ) => spots.push( [ x, z ] );
 
-		const cone = new THREE.Group();
-		const body = new THREE.Mesh( coneGeo, orange );
-		body.position.y = 0.3;
-		const stripe = new THREE.Mesh( stripeGeo, white );
-		stripe.position.y = 0.33;
-		const base = new THREE.Mesh( baseGeo, orange );
-		base.position.y = 0.02;
-		cone.add( body, stripe, base );
-		cone.traverse( ( o ) => ( o.castShadow = o.receiveShadow = true ) );
-		cone.position.set( x, 0, z );
-		scene.add( cone );
-
-	};
-
-	// Slalom
 	for ( let i = 0; i < 8; i ++ ) place( - 10, - 8 - i * 12 );
-	// Pista oval delimitada por cones
 	for ( let i = 0; i < 48; i ++ ) {
 
 		const a = ( i / 48 ) * Math.PI * 2;
@@ -1076,15 +1011,97 @@ function addCones() {
 
 	}
 
-}
+	const matrix = new THREE.Matrix4();
+	for ( const [ geometry, material, y ] of [ [ coneGeo, orange, 0.3 ], [ stripeGeo, white, 0.33 ], [ baseGeo, orange, 0.02 ] ] ) {
 
-// ---------------------------------------------------------------- loop
+		const parts = new THREE.InstancedMesh( geometry, material, spots.length );
+		spots.forEach( ( [ x, z ], i ) => parts.setMatrixAt( i, matrix.makeTranslation( x, y, z ) ) );
+		parts.castShadow = parts.receiveShadow = true;
+		parts.computeBoundingSphere();
+		scene.add( parts );
+
+	}
+
+}
 
 const clock = new THREE.Clock();
 
 function loop() {
 
-	frame( Math.min( clock.getDelta(), 0.05 ) );
+	const dt = clock.getDelta();
+	autoQuality( dt );
+	frame( Math.min( dt, 0.05 ) );
+
+}
+
+const QUALITY = {
+	baixo: { pixelRatio: 1, shadows: false, shadowSize: 1024, refractiveGlass: false },
+	medio: { pixelRatio: 1.25, shadows: true, shadowSize: 1024, refractiveGlass: false },
+	alto: { pixelRatio: 2, shadows: true, shadowSize: 2048, refractiveGlass: true },
+};
+const QUALITY_ORDER = [ 'baixo', 'medio', 'alto' ];
+let quality = null;
+
+function setQuality( name ) {
+
+	const q = QUALITY[ name ];
+	const shadowsChanged = quality === null || q.shadows !== QUALITY[ quality ].shadows;
+	quality = name;
+
+	renderer.setPixelRatio( Math.min( window.devicePixelRatio, q.pixelRatio ) );
+	renderer.setSize( window.innerWidth, window.innerHeight );
+
+	renderer.shadowMap.enabled = q.shadows;
+	sun.castShadow = q.shadows;
+	if ( sun.shadow.mapSize.x !== q.shadowSize ) {
+
+		sun.shadow.mapSize.set( q.shadowSize, q.shadowSize );
+		sun.shadow.map?.dispose();
+		sun.shadow.map = null;
+
+	}
+
+	for ( const c of cars ) c.setGlassQuality( q.refractiveGlass );
+
+	if ( shadowsChanged ) scene.traverse( ( o ) => o.material && [ o.material ].flat().forEach( ( m ) => ( m.needsUpdate = true ) ) );
+
+	setActive( 'quality', name );
+
+}
+
+let savedQuality = null;
+try {
+
+	savedQuality = localStorage.getItem( 'quality' );
+
+} catch {}
+
+const perf = { auto: ! QUALITY[ savedQuality ], skip: 1.5, time: 0, frames: 0 };
+
+function autoQuality( dt ) {
+
+	if ( ! perf.auto ) return;
+	if ( document.hidden || dt > 0.25 ) return;
+	if ( perf.skip > 0 ) return void ( perf.skip -= dt );
+
+	perf.time += dt;
+	perf.frames ++;
+	if ( perf.time < 2.5 ) return;
+
+	const average = perf.time / perf.frames;
+	const level = QUALITY_ORDER.indexOf( quality );
+
+	if ( average > 0.04 && level > 0 ) {
+
+		setQuality( QUALITY_ORDER[ level - 1 ] );
+		toast( `Gráficos ajustados para ${ document.querySelector( `[data-option="quality"] [data-value="${ quality }"]` ).textContent } (desempenho)` );
+		Object.assign( perf, { skip: 1, time: 0, frames: 0 } );
+
+	} else {
+
+		perf.auto = false;
+
+	}
 
 }
 
@@ -1092,7 +1109,6 @@ function frame( dt ) {
 
 	updateTweens( dt );
 
-	// Quem está no controle colide com a garagem, os limites do mundo e os carros parados
 	const t = controlled();
 	const others = cars.filter( ( c ) => c !== t ).map( ( c ) => c.footprint() );
 	const colliders = [ ...garage.colliders, ...worldBounds, ...others ];
@@ -1100,14 +1116,12 @@ function frame( dt ) {
 	if ( onFoot ) {
 
 		const i = readHeroInput();
-		// Qualquer comando de movimento interrompe a dança
 		if ( hero.dancing && ( i.move.lengthSq() > 0 || i.turn || i.jump ) ) hero.stopDance();
 		hero.update( dt, i, colliders );
 
 	}
 	else car.update( dt, busy ? IDLE_INPUT : readInput(), colliders );
-	if ( ! onFoot ) hero.update( dt, { hands: steeringGrip() } ); // sentado, mãos no volante
-	// Na câmera de cockpit a câmera fica dentro da cabeça dele: esconde o corpo
+	if ( ! onFoot ) hero.update( dt, { hands: steeringGrip() } );
 	hero.object.visible = onFoot || cameraMode !== 'cockpit';
 	for ( const c of cars ) if ( c !== t ) c.update( dt, IDLE_INPUT );
 
@@ -1131,7 +1145,6 @@ window.addEventListener( 'resize', () => {
 
 } );
 
-// Acesso pelo console para depuração
 window.app = {
 	scene, camera, garage, controls, THREE, actions, cars, hero,
 	get onFoot() {
@@ -1147,7 +1160,6 @@ window.app = {
 	render: () => renderer.render( scene, camera ),
 	selectCar,
 	setCameraMode,
-	// Avança a simulação manualmente (útil quando a aba está em segundo plano)
 	tick( seconds = 1 ) {
 
 		for ( let t = 0; t < seconds; t += 1 / 60 ) frame( 1 / 60 );

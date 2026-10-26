@@ -1,6 +1,3 @@
-// Mini sistema de tweens: cada animação tem uma chave, e uma nova animação
-// com a mesma chave substitui a anterior (ex.: abrir/fechar porta no meio do movimento).
-
 const active = new Map();
 let nextId = 0;
 

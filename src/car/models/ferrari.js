@@ -1,10 +1,5 @@
 import * as THREE from 'three';
 
-// Ferrari 458 Italia (exemplo webgl_materials_car do three.js).
-// Frente do carro apontando para -Z, unidades em metros.
-
-// Região (no espaço do carro) que define cada porta. Os triângulos cujo centro
-// cai dentro dela são recortados da carroceria e presos a uma dobradiça.
 const DOOR_REGION = { xMin: 0.6, zMin: - 0.72, zMax: 0.6, yMin: 0.3, yMax: 1.0 };
 
 export const ferrari = {
@@ -31,7 +26,6 @@ export const ferrari = {
 		car.root = root;
 		car.object.add( root );
 
-		// Tudo que não é roda vai para o "chassi", que pode inclinar e mudar de altura
 		car.chassis = new THREE.Group();
 		car.chassis.name = 'chassis';
 		root.add( car.chassis );
@@ -60,7 +54,6 @@ function applyMaterials( car ) {
 	get( 'glass' ).material = m.glass;
 	for ( const w of [ 'fl', 'fr', 'rl', 'rr' ] ) get( `rim_${ w }` ).material = m.rims;
 
-	// Materiais originais que vamos modificar: cloná-los evita efeitos colaterais
 	const leather = get( 'leather' );
 	leather.material = leather.material.clone();
 	m.leather = leather.material;
@@ -82,7 +75,6 @@ function applyMaterials( car ) {
 
 function setupWheels( car ) {
 
-	// Cada roda ganha um pivô para poder esterçar (Y) independentemente do giro (X)
 	car.wheels = [];
 	car.frontPivots = [];
 
@@ -98,7 +90,6 @@ function setupWheels( car ) {
 		car.wheels.push( wheel );
 		if ( id[ 0 ] === 'f' ) car.frontPivots.push( pivot );
 
-		// Pinça de freio: um arco preso ao pivô (esterça com a roda, mas não gira)
 		const caliper = new THREE.Mesh( new THREE.TorusGeometry( 0.19, 0.038, 8, 16, 1 ), car.materials.caliper );
 		caliper.rotation.set( 0, Math.PI / 2, 0 );
 		caliper.rotateZ( THREE.MathUtils.degToRad( 121 ) );
@@ -151,9 +142,6 @@ function setupDoors( car ) {
 
 }
 
-// Separa os triângulos de `mesh` que satisfazem `test` (no espaço dado por `matrix`).
-// A malha original fica com o restante; retorna os triângulos removidos já
-// transformados para esse espaço, ou null se nenhum triângulo foi selecionado.
 function splitGeometry( mesh, matrix, test ) {
 
 	const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;

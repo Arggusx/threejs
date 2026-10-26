@@ -1,8 +1,3 @@
-// "Vai, teia!": o clássico disparo de teia, sincronizado com o áudio (public/audio/vai-teia.wav).
-// No "vai" ele se prepara (base firme, braço recolhido); no "teia" (~1,0 s) estica o braço direito
-// com a mão no gesto do lançador (médio e anelar dobrados) e a teia sai do pulso.
-// Formato das poses: ver dance.js. `thwip` = quanto o gesto do lançador está fechado (0..1) em cada mão.
-
 import { poseFromTimeline } from './routine.js';
 
 const SHOT_TIME = 1.0;
@@ -14,7 +9,6 @@ const NEUTRAL = {
 	thwip: { L: 0, R: 0 },
 };
 
-// Base afastada e agachada, ombro direito para trás, mão direita recolhida perto do peito
 const WINDUP = {
 	yaw: - 0.25, lean: - 0.15, roll: 0, twist: - 0.15, neck: 0.05, head: 0.05, bob: 0,
 	legs: { L: [ 0.4, - 0.55, 0 ], R: [ - 0.3, - 0.45, 0.25 ] },
@@ -22,7 +16,6 @@ const WINDUP = {
 	thwip: { L: 0, R: 0.6 },
 };
 
-// Braço direito esticado para a frente, na altura do ombro; a outra mão na cintura
 const SHOOT = {
 	yaw: 0.35, lean: - 0.1, roll: 0, twist: 0.2, neck: 0, head: 0, bob: 0,
 	legs: { L: [ 0.45, - 0.5, 0 ], R: [ - 0.35, - 0.4, 0.3 ] },
