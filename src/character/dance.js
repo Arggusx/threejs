@@ -11,7 +11,9 @@
 //   hands.L/R [fora, cima, frente/trás (+ = para trás), queixo 0..1] — posição da mão em relação ao ombro;
 //             com "queixo" = 1 a mão vai até o queixo (o gesto de "pensando/estilo" do vídeo)
 
-export const DANCE_DURATION = 6.7;
+import { poseFromTimeline } from './routine.js';
+
+const DANCE_DURATION = 6.7;
 
 const pose = ( base, changes ) => ( { ...base, ...changes } );
 
@@ -101,35 +103,4 @@ timeline.push( [ DANCE_DURATION, {
 	legs: { L: STAND, R: STAND }, hands: ARMS_LOOSE,
 } ] );
 
-const smooth = ( x ) => x * x * ( 3 - 2 * x );
-
-function mix( a, b, k ) {
-
-	if ( typeof a === 'number' ) return a + ( b - a ) * k;
-	if ( Array.isArray( a ) ) return a.map( ( v, i ) => mix( v, b[ i ], k ) );
-	const out = {};
-	for ( const key of Object.keys( a ) ) out[ key ] = mix( a[ key ], b[ key ], k );
-	return out;
-
-}
-
-// Pose interpolada no instante `t` (segundos desde o início da música)
-export function dancePose( t ) {
-
-	if ( t <= timeline[ 0 ][ 0 ] ) return timeline[ 0 ][ 1 ];
-
-	for ( let i = 1; i < timeline.length; i ++ ) {
-
-		const [ t1, p1 ] = timeline[ i ];
-		if ( t <= t1 ) {
-
-			const [ t0, p0 ] = timeline[ i - 1 ];
-			return mix( p0, p1, smooth( ( t - t0 ) / Math.max( t1 - t0, 1e-3 ) ) );
-
-		}
-
-	}
-
-	return timeline[ timeline.length - 1 ][ 1 ];
-
-}
+export const DANCE = { duration: DANCE_DURATION, pose: poseFromTimeline( timeline ) };
