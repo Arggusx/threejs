@@ -32,6 +32,7 @@ Abra http://localhost:5173. Para gerar a versão de produção: `npm run build` 
 | `Espaço` | Pular (a pé) / freio de mão |
 | `F` | Entrar no carro mais próximo / sair do carro |
 | `B` | Dançar (a pé) — a dança do meme do Homem-Aranha, com música; qualquer movimento interrompe |
+| `V` | "Vai, teia!" (a pé) — dispara uma teia do pulso, com a fala |
 | `Q` / `E` | Abrir/fechar porta esquerda/direita (carro parado) |
 | `G` | Ir para a garagem / sair da garagem (piloto automático); a pé, abre/fecha o portão |
 | `L` | Faróis |
@@ -61,6 +62,8 @@ src/
     Character.js        personagem a pé: movimento, colisão, pulo e animação procedural dos ossos
     spiderman.js        dados do modelo do Homem-Aranha
     dance.js            coreografia do meme (quadros-chave copiados do vídeo de referência)
+    vaiTeia.js          animação do "vai, teia!" (disparo de teia sincronizado com a fala)
+    routine.js          interpolação das poses-chave das coreografias
   car/
     Car.js              carro genérico: física (modelo de bicicleta), portas, luzes e peças
     models/
@@ -75,7 +78,7 @@ public/                 servido como está pelo Vite
   models/ferrari/       ferrari.glb
   models/porsche/       porsche_992_gt3_r.glb
   models/spiderman/     spiderman.glb
-  audio/                música da dança
+  audio/                música da dança e a fala "vai, teia!"
   textures/             HDR do ambiente e sombra dos carros
   draco/                decodificador Draco
 assets/source/          arquivos originais baixados (não são usados pelo app)

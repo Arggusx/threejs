@@ -5,8 +5,10 @@ import { Car } from './car/Car.js';
 import { CAR_MODELS } from './car/models/index.js';
 import { Character } from './character/Character.js';
 import { spiderman } from './character/spiderman.js';
+import { DANCE } from './character/dance.js';
+import { VAI_TEIA } from './character/vaiTeia.js';
 import { Garage } from './world/garage.js';
-import { updateTweens, wait } from './utils/tween.js';
+import { animate, ease, updateTweens, wait } from './utils/tween.js';
 
 // ---------------------------------------------------------------- renderer / cena
 
@@ -169,6 +171,7 @@ window.addEventListener( 'keydown', ( e ) => {
 		case 'KeyT': if ( ! onFoot ) selectCar( cars[ ( cars.indexOf( car ) + 1 ) % cars.length ] ); break;
 		case 'KeyF': actions.vehicle(); break;
 		case 'KeyB': actions.dance(); break;
+		case 'KeyV': actions.web(); break;
 
 	}
 
@@ -325,20 +328,8 @@ const actions = {
 
 	},
 
-	dance() {
-
-		if ( ! onFoot || busy ) return;
-		if ( hero.dancing ) return hero.stopDance();
-		if ( ! hero.grounded ) return;
-
-		danceAudio.currentTime = 0;
-		const started = performance.now();
-		danceAudio.play().catch( () => {} );
-		// O relógio da dança é o tempo do áudio (se ele não tocar, usa o relógio do navegador)
-		hero.startDance( () => ( danceAudio.paused ? ( performance.now() - started ) / 1000 : danceAudio.currentTime ) );
-		setActiveAction( 'dance', true );
-
-	},
+	dance: () => playRoutine( 'dance' ),
+	web: () => playRoutine( 'web' ),
 
 	vehicle() {
 
@@ -370,17 +361,98 @@ function toggleGarageDoor() {
 
 }
 
-// ---------------------------------------------------------------- dança
+// ---------------------------------------------------------------- coreografias com áudio (dança, "vai teia")
 
-const danceAudio = new Audio( './audio/spiderman-dance.mp3' );
-danceAudio.preload = 'auto';
+const ROUTINES = {
+	dance: { routine: DANCE, audio: new Audio( './audio/spiderman-dance.mp3' ) },
+	web: { routine: VAI_TEIA, audio: new Audio( './audio/vai-teia.wav' ) },
+};
+for ( const r of Object.values( ROUTINES ) ) r.audio.preload = 'auto';
+let playing = null; // nome da coreografia tocando
+
+function playRoutine( name ) {
+
+	if ( ! onFoot || busy ) return;
+	const was = playing;
+	if ( hero.dancing ) hero.stopDance();
+	if ( was === name || ! hero.grounded ) return; // a mesma tecla de novo só para
+
+	const { routine, audio } = ROUTINES[ name ];
+	audio.currentTime = 0;
+	const started = performance.now();
+	audio.play().catch( () => {} );
+	playing = name;
+	// O relógio da animação é o tempo do áudio (se ele não tocar, ou já tiver acabado, usa o relógio do navegador)
+	hero.startDance( () => ( audio.paused ? ( performance.now() - started ) / 1000 : audio.currentTime ), routine );
+	setActiveAction( name, true );
+
+}
 
 hero.onDanceEnd = () => {
 
-	danceAudio.pause();
-	setActiveAction( 'dance', false );
+	ROUTINES[ playing ]?.audio.pause();
+	if ( playing ) setActiveAction( playing, false );
+	playing = null;
 
 };
+
+hero.onRoutineEvent = ( name ) => name === 'web' && shootWeb();
+
+// ---------------------------------------------------------------- teia
+
+// Fio de teia saindo do pulso direito na direção para onde ele aponta. Para no primeiro obstáculo
+// (carro, garagem) ou a 30 m; cresce rápido, fica um pouco e some.
+const webMaterial = new THREE.MeshStandardMaterial( { color: 0xf4f4f4, roughness: 0.6, emissive: 0x666666, transparent: true } );
+const webRay = new THREE.Raycaster();
+let webCount = 0;
+
+function shootWeb() {
+
+	const from = hero.bones.RightHand.getWorldPosition( new THREE.Vector3() );
+	// Na direção do antebraço (para onde o braço esticado aponta), quase na horizontal
+	const elbow = hero.bones.RightForeArm.getWorldPosition( new THREE.Vector3() );
+	const dir = from.clone().sub( elbow ).setY( 0 ).normalize().setY( 0.05 ).normalize();
+
+	webRay.set( from, dir );
+	webRay.far = 30;
+	const hit = webRay.intersectObjects( [ garage.object, ...cars.map( ( c ) => c.root ) ], true ).find( ( h ) => h.object.visible && h.object.material.visible );
+	const length = hit ? hit.distance : 30;
+
+	const web = new THREE.Group();
+	const strand = new THREE.Mesh( new THREE.CylinderGeometry( 0.012, 0.012, 1, 6 ), webMaterial.clone() );
+	strand.rotation.x = Math.PI / 2;
+	strand.position.z = 0.5; // a base do cilindro na origem, crescendo em +Z local
+	web.add( strand );
+
+	// "Gota" de teia na ponta
+	const blob = new THREE.Mesh( new THREE.IcosahedronGeometry( 0.06, 1 ), strand.material );
+	web.add( blob );
+
+	web.position.copy( from );
+	web.lookAt( from.clone().add( dir ) );
+	scene.add( web );
+
+	animate( {
+		key: `web-${ ++ webCount }`, from: 0, to: 1, duration: 1.4, easing: ease.linear,
+		onUpdate: ( v ) => {
+
+			const grow = Math.min( 1, v / 0.12 ); // ~0,17 s para chegar ao alvo
+			web.scale.set( 1, 1, Math.max( grow * length, 0.01 ) );
+			blob.scale.set( 1, 1, 1 / Math.max( grow * length, 0.01 ) );
+			blob.position.z = 1;
+			strand.material.opacity = v < 0.7 ? 1 : 1 - ( v - 0.7 ) / 0.3;
+
+		},
+	} ).then( () => {
+
+		web.removeFromParent();
+		strand.geometry.dispose();
+		blob.geometry.dispose();
+		strand.material.dispose();
+
+	} );
+
+}
 
 // ---------------------------------------------------------------- entrar / sair do carro
 

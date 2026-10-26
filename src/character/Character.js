@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DANCE_DURATION, dancePose } from './dance.js';
 
 // Personagem a pé: anda, corre, pula e colide com o mundo. O modelo não traz animações,
 // então o ciclo de caminhada é feito girando os ossos (rig do Mixamo) a cada quadro.
@@ -266,15 +265,26 @@ export class Character {
 
 		if ( this.dancing ) {
 
-			// Dançando: o relógio é o tempo da música; anda para a frente no ritmo da coreografia
+			// Coreografia (dança, "vai teia"…): o relógio é o tempo do áudio
 			const t = this.danceClock();
-			if ( t >= DANCE_DURATION ) {
+			if ( t >= this.routine.duration ) {
 
 				this.stopDance();
 
 			} else {
 
-				this._pose = dancePose( t );
+				for ( const e of this.routine.events ?? [] ) {
+
+					if ( t >= e.t && ! this._fired.has( e ) ) {
+
+						this._fired.add( e );
+						this.onRoutineEvent?.( e.name );
+
+					}
+
+				}
+
+				this._pose = this.routine.pose( t );
 				this.speed = 0;
 				this.animate( dt );
 				this.plantFoot( colliders );
@@ -489,8 +499,9 @@ export class Character {
 
 	}
 
-	// Fecha a mão: cada falange gira em torno do eixo "de lado" da palma (do mindinho ao indicador)
-	grip( side ) {
+	// Fecha a mão: cada falange gira em torno do eixo "de lado" da palma (do mindinho ao indicador).
+	// `fingers` escolhe quais dedos dobram (o "thwip" do lançador de teia dobra só médio e anelar)
+	grip( side, fingers = [ 'Index', 'Middle', 'Ring', 'Pinky' ], amount = 1, thumb = true ) {
 
 		const f = this.fingers[ side ];
 		if ( ! f.Index.length || ! f.Pinky.length || ! f.Middle.length ) return;
@@ -500,26 +511,29 @@ export class Character {
 		const across = this.boneLocal( f.Index[ 0 ] ).sub( this.boneLocal( f.Pinky[ 0 ] ) ).normalize();
 		const axis = new THREE.Vector3().crossVectors( across, along ).normalize().multiplyScalar( GRIP_SIGN );
 
-		for ( const finger of [ 'Index', 'Middle', 'Ring', 'Pinky' ] ) {
+		for ( const finger of fingers ) {
 
-			for ( const [ i, joint ] of f[ finger ].entries() ) this.rotate( joint, axis, [ 1.2, 1.3, 0.9 ][ i ] );
+			for ( const [ i, joint ] of f[ finger ].entries() ) this.rotate( joint, axis, [ 1.2, 1.3, 0.9 ][ i ] * amount );
 
 		}
 
 		// Polegar: dobra menos, por cima do aro
-		for ( const joint of f.Thumb.slice( 1 ) ) this.rotate( joint, along, - GRIP_SIGN * ( side === 'Left' ? 1 : - 1 ) * 0.6 );
+		if ( thumb ) for ( const joint of f.Thumb.slice( 1 ) ) this.rotate( joint, along, - GRIP_SIGN * ( side === 'Left' ? 1 : - 1 ) * 0.6 * amount );
 
 	}
 
-	// ---------------------------------------------------------------- dança
+	// ---------------------------------------------------------------- coreografias
 
-	// `clock` devolve os segundos desde o início da música (assim a dança fica no ritmo do áudio)
-	startDance( clock ) {
+	// `routine` = { duration, pose( t ), events?: [ { t, name } ] } (ver dance.js e vaiTeia.js);
+	// `clock` devolve os segundos desde o início do áudio (assim a animação fica no ritmo do som)
+	startDance( clock, routine ) {
 
 		this.dancing = true;
 		this.danceClock = clock;
+		this.routine = routine;
+		this._fired = new Set();
 		this._stance = null;
-		this._pose = dancePose( 0 );
+		this._pose = routine.pose( 0 );
 
 	}
 
@@ -607,6 +621,10 @@ export class Character {
 			target.add( new THREE.Vector3( - sign * arc, 0, - arc ).applyQuaternion( chest ) );
 			const pole = new THREE.Vector3( - sign * 0.5, - 0.8, 0.8 ).lerp( new THREE.Vector3( - sign * 1, - 0.4, - 0.4 ), toChin ).applyQuaternion( chest );
 			this.reach( b[ `${ side }Arm` ], b[ `${ side }ForeArm` ], b[ `${ side }Hand` ], target, pole );
+
+			// Gesto do lançador de teia: só o médio e o anelar dobram
+			const thwip = p.thwip?.[ side[ 0 ] ] ?? 0;
+			if ( thwip > 0.01 ) this.grip( side, [ 'Middle', 'Ring' ], thwip * 1.15, false );
 
 		}
 
