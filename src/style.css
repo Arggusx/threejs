@@ -204,6 +204,7 @@ section > .seg.small:first-of-type { margin-top: 0; }
 	border-radius: 8px;
 	margin-bottom: 4px;
 }
+#hud .gear[hidden] { display: none; }
 #hud .status { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
 
 #help {
@@ -262,3 +263,7 @@ section > .seg.small:first-of-type { margin-top: 0; }
 	#hud .speed { font-size: 36px; }
 	#help { display: none; }
 }
+
+/* A pé: esconde o que só faz sentido dentro de um carro */
+#panel.on-foot .car-only { display: none; }
+#panel:not(.on-foot) .foot-only { display: none; }

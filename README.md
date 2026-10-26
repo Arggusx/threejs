@@ -1,14 +1,16 @@
-# Garagem 3D — Ferrari 458 e Porsche 911 GT3 R
+# Garagem 3D — Homem-Aranha, Ferrari 458 e Porsche 911 GT3 R
 
 Projeto em [three.js](https://threejs.org) baseado no exemplo
 [`webgl_materials_car`](https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_car.html).
-Os dois carros ficam no mundo; você dirige um de cada vez e pode trocar a qualquer momento.
+Você controla o Homem-Aranha a pé e pode entrar em qualquer um dos carros para dirigir.
 
 Modelos:
 
 - **Ferrari 458 Italia** de [vicent091036](https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6)
 - **Porsche 992 GT3 R** de [MattDoesBlender](https://sketchfab.com/3d-models/porsche-992-gt3-r-03ea07f7972648aa9350853b2a1a942a),
   licença [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/) (uso não comercial)
+- **The Amazing Spider-Man 2 Spider-Man** de [fredbear1211](https://sketchfab.com/3d-models/the-amazing-spider-man-2-spider-man-def66432d0434cceb2e2ad260a94b5af),
+  licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
 
 ## Como rodar
 
@@ -23,19 +25,27 @@ Abra http://localhost:5173. Para gerar a versão de produção: `npm run build` 
 
 | Tecla | Ação |
 | --- | --- |
-| `W` / `↑` | Acelerar |
-| `S` / `↓` | Frear / ré |
-| `A` `D` / `←` `→` | Virar |
-| `Espaço` | Freio de mão |
+| `W` / `↑` | Andar / acelerar |
+| `S` / `↓` | Andar para trás / frear / ré |
+| `A` `D` / `←` `→` | Andar para os lados (câmera livre) / virar |
+| `Shift` | Correr (a pé) |
+| `Espaço` | Pular (a pé) / freio de mão |
+| `F` | Entrar no carro mais próximo / sair do carro |
+| `B` | Dançar (a pé) — a dança do meme do Homem-Aranha, com música; qualquer movimento interrompe |
 | `Q` / `E` | Abrir/fechar porta esquerda/direita (carro parado) |
-| `G` | Ir para a garagem / sair da garagem (piloto automático) |
+| `G` | Ir para a garagem / sair da garagem (piloto automático); a pé, abre/fecha o portão |
 | `L` | Faróis |
 | `H` | Pisca-alerta |
 | `C` | Alternar câmera (livre, perseguição, cockpit) |
-| `T` | Trocar de carro |
+| `T` | Trocar de carro (dirigindo) |
 
-Também dá para trocar de carro **clicando nele no mundo** (ou na etiqueta com o nome que aparece sobre
-ele) ou pelo seletor **Carro** no painel. O carro precisa estar parado para trocar.
+A pé, chegue perto de um carro e aperte `F`: o Homem-Aranha abre a porta do motorista e entra. Com o carro
+parado, `F` de novo faz ele sair. Também dá para escolher o carro **clicando nele no mundo** (ou na etiqueta
+com o nome que aparece sobre ele) ou pelo seletor **Controle** no painel. O carro precisa estar parado para trocar.
+
+Na câmera livre o Homem-Aranha anda na direção da câmera; nas câmeras de perseguição e primeira pessoa,
+`A`/`D` giram o personagem. O modelo não tem animações: o ciclo de caminhada/corrida/pulo é feito girando os
+ossos do rig (Mixamo) via código em `Character.js`.
 
 O painel lateral permite mudar **cor e acabamento da pintura**, **acabamento das rodas**,
 **cor das pinças de freio**, **aerofólio** (só na Ferrari — o GT3 R já tem asa), **tom dos vidros**,
@@ -47,6 +57,10 @@ O painel lateral permite mudar **cor e acabamento da pintura**, **acabamento das
 src/
   main.js               cena, câmeras, entrada, painel, seleção de carro e sequências de garagem
   style.css
+  character/
+    Character.js        personagem a pé: movimento, colisão, pulo e animação procedural dos ossos
+    spiderman.js        dados do modelo do Homem-Aranha
+    dance.js            coreografia do meme (quadros-chave copiados do vídeo de referência)
   car/
     Car.js              carro genérico: física (modelo de bicicleta), portas, luzes e peças
     models/
@@ -60,6 +74,8 @@ src/
 public/                 servido como está pelo Vite
   models/ferrari/       ferrari.glb
   models/porsche/       porsche_992_gt3_r.glb
+  models/spiderman/     spiderman.glb
+  audio/                música da dança
   textures/             HDR do ambiente e sombra dos carros
   draco/                decodificador Draco
 assets/source/          arquivos originais baixados (não são usados pelo app)

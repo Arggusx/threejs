@@ -3,6 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { Car } from './car/Car.js';
 import { CAR_MODELS } from './car/models/index.js';
+import { Character } from './character/Character.js';
+import { spiderman } from './character/spiderman.js';
 import { Garage } from './world/garage.js';
 import { updateTweens, wait } from './utils/tween.js';
 
@@ -109,18 +111,29 @@ const cars = Object.values( CAR_MODELS ).map( ( model ) => {
 
 let car = cars.find( ( c ) => c.model.id === 'porsche' ) ?? cars[ 0 ];
 
-const loadingBar = document.getElementById( 'loading-bar' );
-const progress = cars.map( () => 0 );
+// Homem-Aranha: começa a pé, ao lado dos carros. Entra/sai de um carro com F.
+const hero = new Character( spiderman );
+hero.object.position.set( 2.4, 0, 3.2 );
+scene.add( hero.object );
+let onFoot = true;
 
-Promise.all( cars.map( ( c, i ) => c.load( ( p ) => {
+// Quem recebe os comandos agora: o personagem ou o carro em que ele está
+const controlled = () => ( onFoot ? hero : car );
+
+const loadingBar = document.getElementById( 'loading-bar' );
+const loadables = [ ...cars, hero ];
+const progress = loadables.map( () => 0 );
+
+Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
 
 	progress[ i ] = p;
-	loadingBar.style.width = `${ progress.reduce( ( a, b ) => a + b ) / cars.length * 100 }%`;
+	loadingBar.style.width = `${ progress.reduce( ( a, b ) => a + b ) / loadables.length * 100 }%`;
 
 } ) ) ).then( () => {
 
 	for ( const c of cars ) createCarLabel( c );
 	syncPanel();
+	setCameraMode( cameraMode );
 	document.getElementById( 'loading' ).classList.add( 'done' );
 	renderer.setAnimationLoop( loop );
 
@@ -134,7 +147,7 @@ Promise.all( cars.map( ( c, i ) => c.load( ( p ) => {
 // ---------------------------------------------------------------- entrada
 
 const keys = new Set();
-const input = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+const input = { throttle: 0, brake: 0, steer: 0, handbrake: false, run: false };
 const IDLE_INPUT = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 window.addEventListener( 'keydown', ( e ) => {
@@ -153,7 +166,9 @@ window.addEventListener( 'keydown', ( e ) => {
 		case 'KeyG': actions.garage(); break;
 		case 'KeyQ': actions[ 'door-left' ](); break;
 		case 'KeyE': actions[ 'door-right' ](); break;
-		case 'KeyT': selectCar( cars[ ( cars.indexOf( car ) + 1 ) % cars.length ] ); break;
+		case 'KeyT': if ( ! onFoot ) selectCar( cars[ ( cars.indexOf( car ) + 1 ) % cars.length ] ); break;
+		case 'KeyF': actions.vehicle(); break;
+		case 'KeyB': actions.dance(); break;
 
 	}
 
@@ -169,7 +184,39 @@ function readInput() {
 	input.brake = has( 'KeyS', 'ArrowDown' ) ? 1 : 0;
 	input.steer = ( has( 'KeyA', 'ArrowLeft' ) ? 1 : 0 ) - ( has( 'KeyD', 'ArrowRight' ) ? 1 : 0 );
 	input.handbrake = has( 'Space' );
+	input.run = has( 'ShiftLeft', 'ShiftRight' );
 	return input;
+
+}
+
+// Comandos do personagem. Na câmera livre o movimento é relativo à câmera; nas outras,
+// W/S andam para a frente/trás e A/D giram (como um carro)
+const heroInput = { move: new THREE.Vector3(), turn: 0, run: false, jump: false, lockFacing: false };
+
+function readHeroInput() {
+
+	const i = busy ? IDLE_INPUT : readInput();
+	const forward = i.throttle - i.brake;
+	heroInput.run = !! i.run;
+	heroInput.jump = !! i.handbrake;
+	heroInput.lockFacing = cameraMode !== 'orbit';
+
+	if ( heroInput.lockFacing ) {
+
+		heroInput.turn = i.steer;
+		hero.forward( heroInput.move ).multiplyScalar( forward );
+
+	} else {
+
+		heroInput.turn = 0;
+		const ahead = camera.getWorldDirection( new THREE.Vector3() ).setY( 0 ).normalize();
+		const right = new THREE.Vector3( - ahead.z, 0, ahead.x );
+		heroInput.move.copy( ahead ).multiplyScalar( forward ).addScaledVector( right, - i.steer );
+		if ( heroInput.move.lengthSq() > 1 ) heroInput.move.normalize();
+
+	}
+
+	return heroInput;
 
 }
 
@@ -189,8 +236,10 @@ function setCameraMode( mode ) {
 
 	if ( mode === 'orbit' ) {
 
-		controls.target.copy( car.position ).setY( 0.5 );
-		camera.position.copy( car.object.localToWorld( tmp.set( 4.5, 1.6, - 4.5 ) ) );
+		const t = controlled();
+		controls.target.copy( t.position ).setY( onFoot ? 1.1 : 0.5 );
+		camera.position.copy( t.object.localToWorld( onFoot ? tmp.set( 1.6, 2.0, 3.6 ) : tmp.set( 4.5, 1.6, - 4.5 ) ) );
+		lastCarPosition.copy( t.position );
 
 	}
 
@@ -200,8 +249,9 @@ function setCameraMode( mode ) {
 
 function updateCamera( dt ) {
 
-	const delta = tmp.subVectors( car.position, lastCarPosition );
-	lastCarPosition.copy( car.position );
+	const t = controlled();
+	const delta = tmp.subVectors( t.position, lastCarPosition );
+	lastCarPosition.copy( t.position );
 
 	if ( cameraMode === 'orbit' ) {
 
@@ -209,6 +259,19 @@ function updateCamera( dt ) {
 		camera.position.add( delta );
 		controls.target.add( delta );
 		controls.update();
+
+	} else if ( onFoot && cameraMode === 'chase' ) {
+
+		const desired = hero.object.localToWorld( new THREE.Vector3( 0, 2.1, 3.8 ) ).setY( 2.1 );
+		camera.position.lerp( desired, 1 - Math.exp( - dt * 6 ) );
+		camera.lookAt( hero.object.localToWorld( new THREE.Vector3( 0, 1.2, - 2 ) ).setY( 1.2 ) );
+
+	} else if ( onFoot ) {
+
+		// Primeira pessoa: olhos do personagem
+		const eye = hero.eyePosition( new THREE.Vector3() );
+		camera.position.copy( eye );
+		camera.lookAt( eye.addScaledVector( hero.forward(), 5 ).setY( eye.y - 0.4 ) );
 
 	} else if ( cameraMode === 'chase' ) {
 
@@ -238,6 +301,7 @@ const actions = {
 
 	lights() {
 
+		if ( onFoot ) return;
 		car.setHeadlights( ! car.headlightsOn );
 		setActiveAction( 'lights', car.headlightsOn );
 
@@ -245,6 +309,7 @@ const actions = {
 
 	hazards() {
 
+		if ( onFoot ) return;
 		car.setHazards( ! car.hazardsOn );
 		setActiveAction( 'hazards', car.hazardsOn );
 
@@ -253,9 +318,35 @@ const actions = {
 	garage() {
 
 		if ( busy ) return;
+		if ( onFoot ) return toggleGarageDoor();
 		if ( garage.contains( car.position ) ) leaveGarage();
 		else if ( cars.some( ( c ) => c !== car && garage.contains( c.position ) ) ) toast( 'A garagem já está ocupada por outro carro' );
 		else goToGarage();
+
+	},
+
+	dance() {
+
+		if ( ! onFoot || busy ) return;
+		if ( hero.dancing ) return hero.stopDance();
+		if ( ! hero.grounded ) return;
+
+		danceAudio.currentTime = 0;
+		const started = performance.now();
+		danceAudio.play().catch( () => {} );
+		// O relógio da dança é o tempo do áudio (se ele não tocar, usa o relógio do navegador)
+		hero.startDance( () => ( danceAudio.paused ? ( performance.now() - started ) / 1000 : danceAudio.currentTime ) );
+		setActiveAction( 'dance', true );
+
+	},
+
+	vehicle() {
+
+		if ( busy ) return;
+		if ( ! onFoot ) return exitCar();
+		const near = nearestCar();
+		if ( near ) enterCar( near );
+		else toast( 'Chegue perto de um carro para entrar (F)' );
 
 	},
 
@@ -263,10 +354,149 @@ const actions = {
 
 function toggleDoor( side ) {
 
-	if ( busy ) return;
+	if ( busy || onFoot ) return;
 	if ( Math.abs( car.speed ) > 0.5 ) return toast( 'Pare o carro para abrir as portas' );
 	car.toggleDoor( side );
 	setActiveAction( `door-${ side }`, car.isDoorOpen( side ) );
+
+}
+
+// A pé, G abre/fecha o portão (e acende/apaga a luz) — senão daria para ficar preso lá dentro
+function toggleGarageDoor() {
+
+	const open = ! garage.doorTarget;
+	if ( open ) garage.setLight( true );
+	garage.setDoor( open ).then( ( finished ) => finished && ! open && garage.setLight( false ) );
+
+}
+
+// ---------------------------------------------------------------- dança
+
+const danceAudio = new Audio( './audio/spiderman-dance.mp3' );
+danceAudio.preload = 'auto';
+
+hero.onDanceEnd = () => {
+
+	danceAudio.pause();
+	setActiveAction( 'dance', false );
+
+};
+
+// ---------------------------------------------------------------- entrar / sair do carro
+
+// Carro mais próximo ao alcance do personagem (ou null)
+function nearestCar() {
+
+	let best = null, bestDistance = Infinity;
+
+	for ( const c of cars ) {
+
+		const d = c.position.distanceTo( hero.position ) - c.model.halfLength;
+		if ( d < 1.8 && d < bestDistance ) {
+
+			best = c;
+			bestDistance = d;
+
+		}
+
+	}
+
+	return best;
+
+}
+
+// Pontos do aro do volante (no mundo) onde ficam as mãos: "9h15", girando junto com o volante
+const GRIP_RADIUS = 0.17;
+
+function steeringGrip() {
+
+	const wheel = car.steeringWheel;
+	wheel.updateWorldMatrix( true, false );
+	const center = wheel.getWorldPosition( new THREE.Vector3() );
+	const side = new THREE.Vector3( 1, 0, 0 ).applyQuaternion( wheel.getWorldQuaternion( new THREE.Quaternion() ) ).multiplyScalar( GRIP_RADIUS );
+	return [ center.clone().sub( side ), center.add( side ) ];
+
+}
+
+// Onde fica o quadril do motorista (espaço do chassi). Procura o encosto e o assento do banco com
+// raios a partir dos olhos do cockpit, para o corpo não atravessar o banco.
+const seatRay = new THREE.Raycaster();
+
+function seatPosition( c ) {
+
+	const eye = c.model.cockpitEye;
+	c.chassis.updateWorldMatrix( true, true );
+
+	const cast = ( from, dir ) => {
+
+		seatRay.set( c.chassis.localToWorld( from ), dir.transformDirection( c.chassis.matrixWorld ) );
+		seatRay.far = 1.2;
+		const hit = seatRay.intersectObject( c.root, true ).find( ( h ) => h.object.visible && h.object.material.visible && h.object.parent.visible && ! h.object.isSkinnedMesh );
+		return hit && c.chassis.worldToLocal( hit.point.clone() );
+
+	};
+
+	const back = cast( new THREE.Vector3( eye.x, eye.y - 0.45, eye.z - 0.3 ), new THREE.Vector3( 0, 0, 1 ) );
+	const backZ = back ? back.z : eye.z + 0.2;
+	const cushion = cast( new THREE.Vector3( eye.x, eye.y - 0.15, backZ - 0.2 ), new THREE.Vector3( 0, - 1, 0 ) );
+	const seatY = cushion ? cushion.y : eye.y - 0.7;
+
+	return new THREE.Vector3( eye.x, seatY + 0.1, backZ - 0.13 );
+
+}
+
+function enterCar( next ) {
+
+	return runSequence( `Entrando: ${ next.model.name }…`, async () => {
+
+		// Perto do carro: abre a porta do motorista, entra e fecha. Longe (pelo painel): só aparece lá dentro
+		const near = hero.position.distanceTo( next.position ) < next.model.halfLength + 2;
+		if ( near && ! next.isDoorOpen( 'left' ) ) await next.setDoor( 'left', true );
+
+		hero.stopDance();
+		hero.sit( next.chassis, seatPosition( next ) );
+		onFoot = false;
+		car = next;
+		syncPanel();
+		setCameraMode( cameraMode );
+
+		await wait( 0.15 );
+		await closeCarDoors();
+
+	} );
+
+}
+
+function exitCar() {
+
+	if ( Math.abs( car.speed ) > 0.5 ) return toast( 'Pare o carro para sair' );
+
+	return runSequence( 'Saindo do carro…', async () => {
+
+		await car.setDoor( 'left', true );
+
+		// Aparece ao lado da porta do motorista (ou do passageiro, se ali estiver bloqueado)
+		const blockers = [ ...garage.colliders, ...worldBounds, ...cars.filter( ( c ) => c !== car ).map( ( c ) => c.footprint() ) ];
+		const spot = new THREE.Vector3();
+		let yaw = car.yaw + Math.PI / 2;
+		for ( const side of [ - 1, 1 ] ) {
+
+			spot.copy( car.object.localToWorld( new THREE.Vector3( side * ( car.model.halfWidth + 0.55 ), 0, 0.1 ) ) ).setY( 0 );
+			yaw = car.yaw + side * - Math.PI / 2;
+			hero.position.copy( spot ); // só para testar a colisão nesse ponto
+			if ( ! hero.collides( blockers ) ) break;
+
+		}
+
+		hero.stand( scene, spot, yaw );
+		onFoot = true;
+		syncPanel();
+		setCameraMode( cameraMode );
+
+		await wait( 0.3 );
+		await closeCarDoors();
+
+	} );
 
 }
 
@@ -470,7 +700,16 @@ async function closeCarDoors() {
 
 function selectCar( next ) {
 
-	if ( next && next !== car ) {
+	if ( next === hero ) {
+
+		if ( ! onFoot && ! busy ) exitCar();
+
+	} else if ( next && onFoot ) {
+
+		if ( busy ) toast( 'Aguarde' );
+		else enterCar( next );
+
+	} else if ( next && next !== car ) {
 
 		if ( busy ) toast( 'Aguarde a manobra terminar' );
 		else if ( Math.abs( car.speed ) > 0.5 ) toast( 'Pare o carro antes de trocar' );
@@ -478,6 +717,7 @@ function selectCar( next ) {
 
 			car.speed = 0;
 			car = next;
+			hero.sit( car.chassis, seatPosition( car ) );
 			lastCarPosition.copy( car.position );
 			syncPanel();
 			setCameraMode( cameraMode );
@@ -487,12 +727,21 @@ function selectCar( next ) {
 
 	}
 
-	setActive( 'car', car.model.id );
+	setActive( 'car', controlled().model.id );
 
 }
 
 // Deixa o painel com os valores do carro selecionado
 function syncPanel() {
+
+	document.getElementById( 'panel' ).classList.toggle( 'on-foot', onFoot );
+	setActive( 'car', controlled().model.id );
+	if ( onFoot ) {
+
+		document.getElementById( 'car-title' ).innerHTML = `${ hero.model.name } <span>${ hero.model.subtitle }</span>`;
+		return;
+
+	}
 
 	const m = car.model;
 	document.getElementById( 'car-title' ).innerHTML = `${ m.name } <span>${ m.subtitle }</span>`;
@@ -552,7 +801,7 @@ function createCarLabel( c ) {
 
 	const el = document.createElement( 'div' );
 	el.className = 'car-label';
-	el.innerHTML = `${ c.model.name } ${ c.model.subtitle }<small>clique para dirigir</small>`;
+	el.innerHTML = `${ c.model.name } ${ c.model.subtitle }<small></small>`;
 	el.hidden = true;
 	el.addEventListener( 'click', () => selectCar( c ) );
 	container.after( el ); // logo depois do canvas, para ficar por baixo do painel e do HUD
@@ -570,9 +819,13 @@ function updateCarLabels() {
 		const distance = labelPosition.distanceTo( camera.position );
 		labelPosition.project( camera );
 
-		const visible = c !== car && labelPosition.z < 1 && distance < 45 && Math.abs( labelPosition.x ) < 1.1 && Math.abs( labelPosition.y ) < 1.1;
+		const visible = ( onFoot || c !== car ) && labelPosition.z < 1 && distance < 45 && Math.abs( labelPosition.x ) < 1.1 && Math.abs( labelPosition.y ) < 1.1;
 		c.label.hidden = ! visible;
 		if ( ! visible ) continue;
+
+		const hint = onFoot && c === nearestCar() ? 'F para entrar' : 'clique para dirigir';
+		const small = c.label.lastChild;
+		if ( small.textContent !== hint ) small.textContent = hint;
 
 		const x = ( labelPosition.x + 1 ) / 2 * window.innerWidth;
 		const y = ( 1 - labelPosition.y ) / 2 * window.innerHeight;
@@ -586,7 +839,7 @@ function updateCarLabels() {
 
 // Botões de seleção de carro, gerados a partir dos modelos disponíveis
 const carOptions = document.querySelector( '[data-option="car"]' );
-for ( const c of cars ) {
+for ( const c of [ hero, ...cars ] ) {
 
 	const button = document.createElement( 'button' );
 	button.dataset.value = c.model.id;
@@ -596,7 +849,7 @@ for ( const c of cars ) {
 }
 
 const optionHandlers = {
-	car: ( v ) => selectCar( cars.find( ( c ) => c.model.id === v ) ),
+	car: ( v ) => selectCar( [ hero, ...cars ].find( ( c ) => c.model.id === v ) ),
 	camera: setCameraMode,
 	paint: ( v ) => {
 
@@ -621,7 +874,8 @@ document.querySelectorAll( '[data-option]' ).forEach( ( group ) => {
 		const option = group.dataset.option;
 		setActive( option, button.dataset.value );
 		optionHandlers[ option ]( button.dataset.value );
-		if ( option in car.settings ) car.settings[ option ] = button.dataset.value;
+		if ( option === 'car' ) setActive( 'car', controlled().model.id ); // a troca pode ter sido recusada
+		else if ( option in car.settings ) car.settings[ option ] = button.dataset.value;
 		button.blur();
 
 	} );
@@ -674,11 +928,18 @@ function setBusyUI( on, label = '' ) {
 
 }
 
-function updateGarageButton() {
+function updateActionLabels() {
 
-	const button = document.querySelector( '[data-action="garage"]' );
-	const label = garage.contains( car.position ) ? 'Sair da garagem' : 'Ir para a garagem';
-	if ( button.firstChild.textContent.trim() !== label ) button.firstChild.textContent = label + ' ';
+	const setLabel = ( action, label ) => {
+
+		const button = document.querySelector( `[data-action="${ action }"]` );
+		if ( button.firstChild.textContent.trim() !== label ) button.firstChild.textContent = label + ' ';
+
+	};
+
+	if ( onFoot ) setLabel( 'garage', garage.doorTarget ? 'Fechar portão' : 'Abrir portão' );
+	else setLabel( 'garage', garage.contains( car.position ) ? 'Sair da garagem' : 'Ir para a garagem' );
+	setLabel( 'vehicle', onFoot ? 'Entrar no carro' : 'Sair do carro' );
 
 }
 
@@ -698,10 +959,11 @@ const gearEl = document.getElementById( 'gear' );
 
 function updateHUD() {
 
-	const kmh = Math.abs( car.speed ) * 3.6;
-	speedEl.textContent = Math.round( kmh );
+	const t = controlled();
+	speedEl.textContent = Math.round( Math.abs( t.speed ) * 3.6 );
+	gearEl.hidden = onFoot;
 	gearEl.textContent = car.speed < - 0.1 ? 'R' : car.speed > 0.1 ? 'D' : 'N';
-	updateGarageButton();
+	updateActionLabels();
 
 }
 
@@ -758,16 +1020,30 @@ function frame( dt ) {
 
 	updateTweens( dt );
 
-	// O carro selecionado colide com a garagem, os limites do mundo e os outros carros
-	const others = cars.filter( ( c ) => c !== car ).map( ( c ) => c.footprint() );
-	car.update( dt, busy ? IDLE_INPUT : readInput(), [ ...garage.colliders, ...worldBounds, ...others ] );
-	for ( const c of cars ) if ( c !== car ) c.update( dt, IDLE_INPUT );
+	// Quem está no controle colide com a garagem, os limites do mundo e os carros parados
+	const t = controlled();
+	const others = cars.filter( ( c ) => c !== t ).map( ( c ) => c.footprint() );
+	const colliders = [ ...garage.colliders, ...worldBounds, ...others ];
 
-	if ( garage.update( car ) ) toast( 'Portão reaberto: carro embaixo do portão' );
+	if ( onFoot ) {
+
+		const i = readHeroInput();
+		// Qualquer comando de movimento interrompe a dança
+		if ( hero.dancing && ( i.move.lengthSq() > 0 || i.turn || i.jump ) ) hero.stopDance();
+		hero.update( dt, i, colliders );
+
+	}
+	else car.update( dt, busy ? IDLE_INPUT : readInput(), colliders );
+	if ( ! onFoot ) hero.update( dt, { hands: steeringGrip() } ); // sentado, mãos no volante
+	// Na câmera de cockpit a câmera fica dentro da cabeça dele: esconde o corpo
+	hero.object.visible = onFoot || cameraMode !== 'cockpit';
+	for ( const c of cars ) if ( c !== t ) c.update( dt, IDLE_INPUT );
+
+	if ( garage.update( t ) ) toast( onFoot ? 'Portão reaberto: tem alguém embaixo' : 'Portão reaberto: carro embaixo do portão' );
 	updateCamera( dt );
 
-	sun.position.copy( car.position ).add( tmp.set( 10, 18, 8 ) );
-	sun.target.position.copy( car.position );
+	sun.position.copy( t.position ).setY( 0 ).add( tmp.set( 10, 18, 8 ) );
+	sun.target.position.copy( t.position ).setY( 0 );
 
 	updateHUD();
 	updateCarLabels();
@@ -785,7 +1061,12 @@ window.addEventListener( 'resize', () => {
 
 // Acesso pelo console para depuração
 window.app = {
-	scene, camera, garage, controls, THREE, actions, cars,
+	scene, camera, garage, controls, THREE, actions, cars, hero,
+	get onFoot() {
+
+		return onFoot;
+
+	},
 	get car() {
 
 		return car;

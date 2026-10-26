@@ -29,7 +29,7 @@
 
 			<div class="panel-body">
 				<section>
-					<h2>Carro <kbd>T</kbd></h2>
+					<h2>Controle <kbd>F</kbd> entrar/sair · <kbd>T</kbd> trocar</h2>
 					<div class="seg" data-option="car"></div>
 				</section>
 
@@ -45,15 +45,17 @@
 				<section>
 					<h2>Ações</h2>
 					<div class="actions">
-						<button data-action="door-left">Porta esq. <kbd>Q</kbd></button>
-						<button data-action="door-right">Porta dir. <kbd>E</kbd></button>
-						<button data-action="garage" class="wide primary">Ir para a garagem <kbd>G</kbd></button>
-						<button data-action="lights">Faróis <kbd>L</kbd></button>
-						<button data-action="hazards">Pisca-alerta <kbd>H</kbd></button>
+						<button data-action="vehicle" class="wide primary">Entrar no carro <kbd>F</kbd></button>
+						<button data-action="door-left" class="car-only">Porta esq. <kbd>Q</kbd></button>
+						<button data-action="door-right" class="car-only">Porta dir. <kbd>E</kbd></button>
+						<button data-action="dance" class="wide foot-only">Dançar <kbd>B</kbd></button>
+						<button data-action="garage" class="wide">Ir para a garagem <kbd>G</kbd></button>
+						<button data-action="lights" class="car-only">Faróis <kbd>L</kbd></button>
+						<button data-action="hazards" class="car-only">Pisca-alerta <kbd>H</kbd></button>
 					</div>
 				</section>
 
-				<section>
+				<section class="car-only">
 					<h2>Pintura</h2>
 					<div class="swatches" data-option="paint">
 						<button data-value="#d40000" style="--c:#d40000" title="Rosso Corsa" class="active"></button>
@@ -75,7 +77,7 @@
 					</div>
 				</section>
 
-				<section>
+				<section class="car-only">
 					<h2>Peças</h2>
 
 					<label class="row-label">Rodas</label>
@@ -133,7 +135,7 @@
 		</aside>
 
 		<div id="help">
-			<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / setas dirigir · <kbd>Espaço</kbd> freio de mão · clique em outro carro para dirigi-lo
+			<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / setas andar ou dirigir · <kbd>Shift</kbd> correr · <kbd>Espaço</kbd> pular / freio de mão · <kbd>F</kbd> entrar/sair do carro · <kbd>B</kbd> dançar
 		</div>
 
 		<div id="toast"></div>
