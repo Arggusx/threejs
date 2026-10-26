@@ -48,6 +48,10 @@ Na câmera livre o Homem-Aranha anda na direção da câmera; nas câmeras de pe
 `A`/`D` giram o personagem. O modelo não tem animações: o ciclo de caminhada/corrida/pulo é feito girando os
 ossos do rig (Mixamo) via código em `Character.js`.
 
+Em **Gráficos** (painel) dá para escolher a qualidade: **Baixo** (sem sombras, resolução 1:1), **Médio**
+(sombra menor, vidro sem refração) ou **Alto**. Na primeira visita o jogo começa no Alto, mede o tempo
+dos quadros e desce de nível sozinho se ficar abaixo de ~25 fps; uma escolha manual fica salva no navegador.
+
 O painel lateral permite mudar **cor e acabamento da pintura**, **acabamento das rodas**,
 **cor das pinças de freio**, **aerofólio** (só na Ferrari — o GT3 R já tem asa), **tom dos vidros**,
 **cor do couro** e **altura da suspensão**. Cada carro guarda as suas próprias escolhas.

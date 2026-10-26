@@ -1,6 +1,3 @@
-// Interpolação de coreografias: uma linha do tempo de poses-chave ([tempo, pose]) vira uma função
-// pose( t ) com transições suaves. Todas as poses de uma linha do tempo têm as mesmas chaves.
-
 const smooth = ( x ) => x * x * ( 3 - 2 * x );
 
 function mix( a, b, k ) {

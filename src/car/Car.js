@@ -3,15 +3,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { animate, ease } from '../utils/tween.js';
 
-// Carro genérico: física, portas, luzes e personalização. O que muda de um modelo 3D
-// para outro (nomes das peças, pivôs, medidas) fica em ./models/.
-// Unidades em metros, frente do carro apontando para -Z.
-
 const MAX_STEER = 0.6;
-const MAX_SPEED = 75; // m/s (~270 km/h)
+const MAX_SPEED = 75;
 const MAX_REVERSE = 8;
-const MAX_LATERAL_ACCEL = 14; // m/s² (~1.4 g de aderência)
-const MAX_AUTOPILOT_YAW_RATE = 1.2; // rad/s
+const MAX_LATERAL_ACCEL = 14;
+const MAX_AUTOPILOT_YAW_RATE = 1.2;
 const DOOR_ANGLE = THREE.MathUtils.degToRad( 65 );
 
 export const PAINT_FINISHES = {
@@ -39,7 +35,6 @@ export const GLASS_TINTS = {
 
 export const SUSPENSION = { padrao: 0, rebaixada: - 0.04, elevada: 0.06 };
 
-// Valores iniciais das opções do painel (cada modelo pode sobrescrever em `defaults`)
 export const DEFAULT_SETTINGS = {
 	paint: '#d40000', finish: 'metalico', rims: 'prata', calipers: '#ffc400',
 	spoiler: 'none', glass: 'transparente', interior: '#ffffff', suspension: 'padrao',
@@ -56,13 +51,13 @@ export class Car {
 		this.model = model;
 		this.settings = { ...DEFAULT_SETTINGS, ...model.defaults };
 
-		this.object = new THREE.Group(); // posição/rotação no mundo
+		this.object = new THREE.Group();
 		this.object.name = model.id;
 
-		this.speed = 0; // m/s, positivo = para frente
+		this.speed = 0;
 		this.steer = 0;
 		this.wheelSpin = 0;
-		this.doors = { left: 0, right: 0 }; // 0 = fechada, 1 = aberta (valor animado)
+		this.doors = { left: 0, right: 0 };
 		this.doorTargets = { left: false, right: false };
 		this.headlightsOn = false;
 		this.hazardsOn = false;
@@ -75,7 +70,6 @@ export class Car {
 		this._prevSpeed = 0;
 		this._time = 0;
 
-		// Pontos do contorno do carro usados para colisão: só o perímetro, 5 na largura × 9 no comprimento
 		const w = model.halfWidth, l = model.halfLength;
 		this.hull = [];
 		for ( let i = 0; i <= 4; i ++ ) for ( let j = 0; j <= 8; j ++ ) {
@@ -109,25 +103,25 @@ export class Car {
 			shadowTexture,
 		] );
 
-		// O modelo monta root, chassis, rodas, volante, portas, materiais e bounds
 		this.model.build( this, gltf );
 		this.interiorBase = this.materials.leather.color.clone();
 
 		this.setupLights();
 		if ( this.model.spoilers ) this.setupSpoilers();
 
+		this.root.updateMatrixWorld( true );
+		const extent = new THREE.Vector3();
 		this.root.traverse( ( o ) => {
 
 			if ( o.isMesh ) {
 
-				o.castShadow = true;
+				o.castShadow = new THREE.Box3().setFromObject( o ).getSize( extent ).length() > 0.6;
 				o.receiveShadow = true;
 
 			}
 
 		} );
 
-		// Sombra de oclusão ambiente do exemplo original, esticada para o tamanho do carro
 		const shadow = new THREE.Mesh(
 			new THREE.PlaneGeometry( ...this.model.shadowSize ),
 			new THREE.MeshBasicMaterial( { map: shadowMap, blending: THREE.MultiplyBlending, toneMapped: false, transparent: true, premultipliedAlpha: true } )
@@ -137,7 +131,6 @@ export class Car {
 		shadow.renderOrder = 2;
 		this.root.add( shadow );
 
-		// Caixa invisível e leve, usada para clicar no carro e selecioná-lo
 		const size = this.bounds.getSize( new THREE.Vector3() );
 		this.hitBox = new THREE.Mesh( new THREE.BoxGeometry( size.x, size.y, size.z ), new THREE.MeshBasicMaterial( { visible: false } ) );
 		this.bounds.getCenter( this.hitBox.position );
@@ -148,14 +141,11 @@ export class Car {
 
 	}
 
-	// Chave de animação única por carro (as animações de um carro não cancelam as do outro)
 	key( name ) {
 
 		return `${ this.model.id }-${ name }`;
 
 	}
-
-	// ---------------------------------------------------------------- portas
 
 	isDoorOpen( side ) {
 
@@ -179,7 +169,7 @@ export class Car {
 
 				this.doors[ side ] = v;
 				pivot.rotation.y = sign * DOOR_ANGLE * v;
-				pivot.rotation.z = sign * 0.08 * v; // leve elevação, como numa porta real
+				pivot.rotation.z = sign * 0.08 * v;
 
 			},
 		} );
@@ -197,8 +187,6 @@ export class Car {
 		return Promise.all( [ this.setDoor( 'left', false ), this.setDoor( 'right', false ) ] );
 
 	}
-
-	// ---------------------------------------------------------------- luzes
 
 	setupLights() {
 
@@ -237,7 +225,12 @@ export class Car {
 			key: this.key( 'headlights' ), from: on ? 0 : 1, to: on ? 1 : 0, duration: 0.25,
 			onUpdate: ( v ) => {
 
-				for ( const l of this.headlights ) l.intensity = v * 60;
+				for ( const l of this.headlights ) {
+
+					l.intensity = v * 60;
+					l.visible = v > 0;
+
+				}
 				m.headlights.emissiveIntensity = v * 3;
 
 			},
@@ -251,13 +244,10 @@ export class Car {
 
 	}
 
-	// ---------------------------------------------------------------- peças
-
 	setupSpoilers() {
 
 		const b = this.bounds;
 
-		// Descobre a altura da tampa traseira com um raio vindo de cima
 		const deckZ = b.max.z - 0.38;
 		const ray = new THREE.Raycaster( new THREE.Vector3( 0, 5, deckZ ), new THREE.Vector3( 0, - 1, 0 ) );
 		const hit = ray.intersectObject( this.bodyMesh, false )[ 0 ];
@@ -266,7 +256,6 @@ export class Car {
 		const carbon = this.materials.carbon;
 		this.spoilers = {};
 
-		// Asa GT: perfil + suportes + placas laterais
 		const wing = new THREE.Group();
 		const profile = new THREE.Shape();
 		profile.moveTo( 0, 0 );
@@ -292,7 +281,6 @@ export class Car {
 		wing.position.set( 0, deckY, deckZ );
 		this.spoilers.gt = wing;
 
-		// Lip spoiler discreto na borda da tampa
 		const lip = new THREE.Mesh( new THREE.BoxGeometry( 1.35, 0.025, 0.14 ), carbon );
 		lip.position.set( 0, deckY + 0.04, b.max.z - 0.22 );
 		lip.rotation.x = 0.25;
@@ -366,9 +354,19 @@ export class Car {
 
 	}
 
+	setGlassQuality( refractive ) {
+
+		const glass = this.materials.glass;
+		glass.transmission = refractive ? 1 : 0;
+		glass.transparent = ! refractive;
+		glass.opacity = refractive ? 1 : 0.3;
+		glass.depthWrite = refractive;
+		glass.needsUpdate = true;
+
+	}
+
 	setInterior( color ) {
 
-		// "Original" (branco) volta à cor de fábrica do banco
 		const c = new THREE.Color( color );
 		this.materials.leather.color.copy( c.equals( new THREE.Color( 0xffffff ) ) ? this.interiorBase : c.multiplyScalar( this.model.interiorTint ) );
 
@@ -379,8 +377,6 @@ export class Car {
 		animate( { key: this.key( 'suspension' ), from: this.rideHeight, to: SUSPENSION[ name ], duration: 0.8, easing: ease.outBack, onUpdate: ( v ) => ( this.rideHeight = v ) } );
 
 	}
-
-	// ---------------------------------------------------------------- direção
 
 	get position() {
 
@@ -424,8 +420,8 @@ export class Car {
 	updateDriving( dt, input ) {
 
 		const doorsOpen = this.doors.left > 0.05 || this.doors.right > 0.05;
-		let drive = 0; // aceleração do motor (com sinal)
-		let resist = 0.6 + this.speed * this.speed * 0.0012; // rolagem + arrasto (sempre contra o movimento)
+		let drive = 0;
+		let resist = 0.6 + this.speed * this.speed * 0.0012;
 		this.braking = false;
 
 		if ( input.handbrake ) {
@@ -435,7 +431,6 @@ export class Car {
 
 		} else if ( input.throttle > 0 ) {
 
-			// Acelerar enquanto anda de ré primeiro freia
 			if ( this.speed < - 0.3 ) resist += 14;
 			else if ( ! doorsOpen ) drive = 9 * ( 1 - this.speed / MAX_SPEED );
 
@@ -454,15 +449,12 @@ export class Car {
 
 		}
 
-		// O volante sempre vai até o batente. Se o esterço pede mais curva do que os pneus
-		// aguentam, o carro sai de frente (a curva fica limitada em `yawRate`) e perde velocidade.
 		const wanted = Math.abs( this.speed * Math.tan( this.steer ) / this.model.wheelbase );
 		const excess = wanted > 0 ? 1 - Math.abs( this.yawRate() ) / wanted : 0;
 		resist += excess * 6;
 
 		this.speed += drive * dt;
 
-		// A resistência pode parar o carro, mas nunca empurrá-lo no sentido contrário
 		const decel = resist * dt;
 		this.speed = Math.abs( this.speed ) <= decel ? 0 : this.speed - Math.sign( this.speed ) * decel;
 
@@ -471,7 +463,6 @@ export class Car {
 
 	}
 
-	// Velocidade de giro (rad/s) do modelo de bicicleta, limitada pela aderência dos pneus
 	yawRate() {
 
 		const rate = this.speed * Math.tan( this.steer ) / this.model.wheelbase;
@@ -485,14 +476,12 @@ export class Car {
 		const pos = this.object.position;
 		const dir = new THREE.Vector3();
 
-		// Subpassos de no máximo 10 cm para não atravessar paredes finas em alta velocidade
 		const steps = Math.max( 1, Math.ceil( Math.abs( this.speed * dt ) / 0.1 ) );
 		const h = dt / steps;
 
 		for ( let i = 0; i < steps; i ++ ) {
 
 			const prevX = pos.x, prevZ = pos.z, prevYaw = this.object.rotation.y;
-			// Se já estava sobrepondo algo (ex.: portão fechou em cima do carro), deixa sair
 			const wasColliding = this.collides( colliders );
 
 			this.object.rotation.y += this.yawRate() * h;
@@ -530,7 +519,6 @@ export class Car {
 
 	}
 
-	// Retângulo (alinhado aos eixos) que o carro ocupa no chão; serve de obstáculo para os outros carros
 	footprint( target = new THREE.Box2() ) {
 
 		const s = Math.abs( Math.sin( this.yaw ) ), c = Math.abs( Math.cos( this.yaw ) );
@@ -541,7 +529,6 @@ export class Car {
 
 	}
 
-	// Segue uma curva (CurvePath/Curve3) com velocidade suave. Retorna uma Promise.
 	followPath( curve, { maxSpeed = 5, reverse = false } = {} ) {
 
 		const length = curve.getLength();
@@ -561,7 +548,6 @@ export class Car {
 		const a = 2.2;
 		const remaining = ap.length - ap.s;
 
-		// Em curvas fechadas reduz a velocidade para o carro não girar rápido demais
 		const u0 = ap.s / ap.length;
 		const ahead = Math.min( 0.3, remaining );
 		const bend = ahead > 1e-3 ? ap.curve.getTangentAt( u0 ).angleTo( ap.curve.getTangentAt( ( ap.s + ahead ) / ap.length ) ) / ahead : 0;
@@ -605,17 +591,13 @@ export class Car {
 
 	updateVisuals( dt ) {
 
-		// Giro das rodas
 		this.wheelSpin -= this.speed * dt / this.model.wheelRadius;
 		for ( const w of this.wheels ) w.rotation.x = this.wheelSpin;
 		for ( const p of this.frontPivots ) p.rotation.y = this.steer;
 
-		// Volante (relação ~1:5). O eixo Y local da coluna aponta para a frente do carro,
-		// por isso o sinal negativo: esterço à esquerda gira o volante no sentido anti-horário.
 		const turn = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), - this.steer * 5 );
 		this.steeringWheel.quaternion.copy( this.steeringBase ).multiply( turn );
 
-		// Inclinação da carroceria por aceleração lateral/longitudinal
 		const longAccel = dt > 0 ? ( this.speed - this._prevSpeed ) / dt : 0;
 		const latAccel = this.speed * this.yawRate();
 		this._prevSpeed = this.speed;
@@ -626,13 +608,12 @@ export class Car {
 		this.chassis.rotation.set( this._pitch, 0, this._roll );
 		this.chassis.position.y = this.rideHeight;
 
-		// Lanternas: acesas com farol, mais fortes ao frear
 		const m = this.materials;
 		m.taillights.emissive.set( 0xff1010 );
 		m.taillights.emissiveIntensity = this.braking ? 4 : this.headlightsOn ? 1.2 : 0;
 		this.reverseLight.intensity = this.speed < - 0.1 ? 4 : 0;
+		this.reverseLight.visible = this.reverseLight.intensity > 0;
 
-		// Pisca-alerta
 		const blink = this.hazardsOn && Math.floor( this._time * 2.5 ) % 2 === 0;
 		m.leds.emissive.set( blink ? 0xff8a00 : 0xffffff );
 		m.leds.emissiveIntensity = blink ? 6 : this.headlightsOn ? 2 : 0;

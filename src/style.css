@@ -39,8 +39,6 @@ kbd {
 	text-align: center;
 }
 
-/* ---------------- carregamento */
-
 #loading {
 	position: fixed;
 	inset: 0;
@@ -58,8 +56,6 @@ kbd {
 
 .bar { width: 260px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
 .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
-
-/* ---------------- painel */
 
 #panel {
 	position: fixed;
@@ -115,7 +111,6 @@ button.icon {
 	padding: 2px 6px;
 }
 
-/* botões segmentados */
 .seg { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .seg button,
@@ -150,7 +145,6 @@ section > .seg.small:first-of-type { margin-top: 0; }
 .actions kbd { margin-left: 4px; }
 .actions .primary kbd { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
 
-/* amostras de cor */
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .swatches button,
@@ -177,8 +171,6 @@ section > .seg.small:first-of-type { margin-top: 0; }
 }
 
 .swatches .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-
-/* ---------------- HUD */
 
 #hud {
 	position: fixed;
@@ -236,8 +228,6 @@ section > .seg.small:first-of-type { margin-top: 0; }
 
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-
-/* Nome flutuando sobre os carros estacionados (clique para dirigir) */
 .car-label {
 	position: fixed;
 	left: 0;
@@ -264,6 +254,5 @@ section > .seg.small:first-of-type { margin-top: 0; }
 	#help { display: none; }
 }
 
-/* A pé: esconde o que só faz sentido dentro de um carro */
 #panel.on-foot .car-only { display: none; }
 #panel:not(.on-foot) .foot-only { display: none; }
