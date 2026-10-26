@@ -10,6 +10,7 @@ import { animate, ease } from '../utils/tween.js';
 const MAX_STEER = 0.6;
 const MAX_SPEED = 75; // m/s (~270 km/h)
 const MAX_REVERSE = 8;
+const MAX_LATERAL_ACCEL = 14; // m/s² (~1.4 g de aderência)
 const MAX_AUTOPILOT_YAW_RATE = 1.2; // rad/s
 const DOOR_ANGLE = THREE.MathUtils.degToRad( 65 );
 
@@ -453,16 +454,29 @@ export class Car {
 
 		}
 
+		// O volante sempre vai até o batente. Se o esterço pede mais curva do que os pneus
+		// aguentam, o carro sai de frente (a curva fica limitada em `yawRate`) e perde velocidade.
+		const wanted = Math.abs( this.speed * Math.tan( this.steer ) / this.model.wheelbase );
+		const excess = wanted > 0 ? 1 - Math.abs( this.yawRate() ) / wanted : 0;
+		resist += excess * 6;
+
 		this.speed += drive * dt;
 
 		// A resistência pode parar o carro, mas nunca empurrá-lo no sentido contrário
 		const decel = resist * dt;
 		this.speed = Math.abs( this.speed ) <= decel ? 0 : this.speed - Math.sign( this.speed ) * decel;
 
-		// Limita o esterço para que a aceleração lateral não passe de ~1.2 g
-		const steerLimit = Math.min( MAX_STEER, Math.atan( 12 * this.model.wheelbase / Math.max( this.speed * this.speed, 1e-3 ) ) );
-		const target = input.steer * steerLimit;
+		const target = input.steer * MAX_STEER;
 		this.steer += THREE.MathUtils.clamp( target - this.steer, - 2.5 * dt, 2.5 * dt );
+
+	}
+
+	// Velocidade de giro (rad/s) do modelo de bicicleta, limitada pela aderência dos pneus
+	yawRate() {
+
+		const rate = this.speed * Math.tan( this.steer ) / this.model.wheelbase;
+		const limit = MAX_LATERAL_ACCEL / Math.max( Math.abs( this.speed ), 1e-3 );
+		return THREE.MathUtils.clamp( rate, - limit, limit );
 
 	}
 
@@ -481,7 +495,7 @@ export class Car {
 			// Se já estava sobrepondo algo (ex.: portão fechou em cima do carro), deixa sair
 			const wasColliding = this.collides( colliders );
 
-			this.object.rotation.y += ( this.speed * Math.tan( this.steer ) / this.model.wheelbase ) * h;
+			this.object.rotation.y += this.yawRate() * h;
 			pos.addScaledVector( this.forward( dir ), this.speed * h );
 
 			if ( ! wasColliding && this.collides( colliders ) ) {
@@ -603,7 +617,7 @@ export class Car {
 
 		// Inclinação da carroceria por aceleração lateral/longitudinal
 		const longAccel = dt > 0 ? ( this.speed - this._prevSpeed ) / dt : 0;
-		const latAccel = this.speed * this.speed * Math.tan( this.steer ) / this.model.wheelbase;
+		const latAccel = this.speed * this.yawRate();
 		this._prevSpeed = this.speed;
 
 		const k = Math.min( 1, dt * 5 );
