@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { animate, ease } from './tween.js';
+import { animate, ease } from '../utils/tween.js';
 
 const WIDTH = 6; // interno
 const DEPTH = 7.6;

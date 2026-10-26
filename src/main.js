@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
-import { Car } from './car.js';
-import { Garage } from './garage.js';
-import { updateTweens, wait } from './tween.js';
+import { Car } from './car/Car.js';
+import { CAR_MODELS } from './car/models/index.js';
+import { Garage } from './world/garage.js';
+import { updateTweens, wait } from './utils/tween.js';
 
 // ---------------------------------------------------------------- renderer / cena
 
@@ -87,15 +88,39 @@ const worldBounds = [
 	new THREE.Box2( new THREE.Vector2( worldLimit, - 400 ), new THREE.Vector2( 400, 400 ) ),
 ];
 
-// ---------------------------------------------------------------- carro
+// ---------------------------------------------------------------- carros
 
-const car = new Car();
-scene.add( car.object );
+// Todos os carros ficam no mundo; só o selecionado (`car`) recebe os comandos
+const START = {
+	porsche: { position: new THREE.Vector3( 0, 0, 0 ), yaw: 0 },
+	ferrari: { position: new THREE.Vector3( - 4.5, 0, 0 ), yaw: 0 },
+};
+
+const cars = Object.values( CAR_MODELS ).map( ( model ) => {
+
+	const c = new Car( model );
+	const start = START[ model.id ] ?? { position: new THREE.Vector3(), yaw: 0 };
+	c.object.position.copy( start.position );
+	c.object.rotation.y = start.yaw;
+	scene.add( c.object );
+	return c;
+
+} );
+
+let car = cars.find( ( c ) => c.model.id === 'porsche' ) ?? cars[ 0 ];
 
 const loadingBar = document.getElementById( 'loading-bar' );
+const progress = cars.map( () => 0 );
 
-car.load( ( p ) => ( loadingBar.style.width = `${ p * 100 }%` ) ).then( () => {
+Promise.all( cars.map( ( c, i ) => c.load( ( p ) => {
 
+	progress[ i ] = p;
+	loadingBar.style.width = `${ progress.reduce( ( a, b ) => a + b ) / cars.length * 100 }%`;
+
+} ) ) ).then( () => {
+
+	for ( const c of cars ) createCarLabel( c );
+	syncPanel();
 	document.getElementById( 'loading' ).classList.add( 'done' );
 	renderer.setAnimationLoop( loop );
 
@@ -128,6 +153,7 @@ window.addEventListener( 'keydown', ( e ) => {
 		case 'KeyG': actions.garage(); break;
 		case 'KeyQ': actions[ 'door-left' ](); break;
 		case 'KeyE': actions[ 'door-right' ](); break;
+		case 'KeyT': selectCar( cars[ ( cars.indexOf( car ) + 1 ) % cars.length ] ); break;
 
 	}
 
@@ -150,7 +176,6 @@ function readInput() {
 // ---------------------------------------------------------------- câmera
 
 const CAMERA_MODES = [ 'orbit', 'chase', 'cockpit' ];
-const COCKPIT_EYE = new THREE.Vector3( - 0.36, 1.13, 0.32 ); // olhos do motorista (espaço do chassi)
 let cameraMode = 'orbit';
 const lastCarPosition = new THREE.Vector3();
 const tmp = new THREE.Vector3();
@@ -194,8 +219,9 @@ function updateCamera( dt ) {
 
 	} else {
 
-		camera.position.copy( car.chassis.localToWorld( COCKPIT_EYE.clone() ) );
-		camera.lookAt( car.chassis.localToWorld( new THREE.Vector3( - 0.36, 0.95, - 5 ) ) );
+		const eye = car.model.cockpitEye; // olhos do motorista (espaço do chassi)
+		camera.position.copy( car.chassis.localToWorld( eye.clone() ) );
+		camera.lookAt( car.chassis.localToWorld( new THREE.Vector3( eye.x, 0.95, - 5 ) ) );
 
 	}
 
@@ -228,6 +254,7 @@ const actions = {
 
 		if ( busy ) return;
 		if ( garage.contains( car.position ) ) leaveGarage();
+		else if ( cars.some( ( c ) => c !== car && garage.contains( c.position ) ) ) toast( 'A garagem já está ocupada por outro carro' );
 		else goToGarage();
 
 	},
@@ -439,9 +466,137 @@ async function closeCarDoors() {
 
 }
 
+// ---------------------------------------------------------------- seleção de carro
+
+function selectCar( next ) {
+
+	if ( next && next !== car ) {
+
+		if ( busy ) toast( 'Aguarde a manobra terminar' );
+		else if ( Math.abs( car.speed ) > 0.5 ) toast( 'Pare o carro antes de trocar' );
+		else {
+
+			car.speed = 0;
+			car = next;
+			lastCarPosition.copy( car.position );
+			syncPanel();
+			setCameraMode( cameraMode );
+			toast( `Dirigindo: ${ car.model.name } ${ car.model.subtitle }` );
+
+		}
+
+	}
+
+	setActive( 'car', car.model.id );
+
+}
+
+// Deixa o painel com os valores do carro selecionado
+function syncPanel() {
+
+	const m = car.model;
+	document.getElementById( 'car-title' ).innerHTML = `${ m.name } <span>${ m.subtitle }</span>`;
+	document.getElementById( 'spoiler-options' ).hidden = ! m.spoilers;
+	document.getElementById( 'paint-custom' ).value = car.settings.paint;
+	for ( const [ option, value ] of Object.entries( car.settings ) ) setActive( option, value );
+	setActive( 'car', m.id );
+
+	setActiveAction( 'lights', car.headlightsOn );
+	setActiveAction( 'hazards', car.hazardsOn );
+	setActiveAction( 'door-left', car.isDoorOpen( 'left' ) );
+	setActiveAction( 'door-right', car.isDoorOpen( 'right' ) );
+
+}
+
+// Clique em um carro do mundo para dirigi-lo (só conta se o mouse não arrastou a câmera)
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pointerDown = null;
+
+function carUnderPointer( e ) {
+
+	pointer.set( ( e.clientX / window.innerWidth ) * 2 - 1, - ( e.clientY / window.innerHeight ) * 2 + 1 );
+	raycaster.setFromCamera( pointer, camera );
+	const hit = raycaster.intersectObjects( cars.filter( ( c ) => c.hitBox ).map( ( c ) => c.hitBox ), false )[ 0 ];
+	return hit?.object.userData.car;
+
+}
+
+renderer.domElement.addEventListener( 'pointerdown', ( e ) => ( pointerDown = { x: e.clientX, y: e.clientY } ) );
+
+renderer.domElement.addEventListener( 'pointerup', ( e ) => {
+
+	if ( pointerDown && Math.hypot( e.clientX - pointerDown.x, e.clientY - pointerDown.y ) < 5 ) {
+
+		const hit = carUnderPointer( e );
+		if ( hit ) selectCar( hit );
+
+	}
+
+	pointerDown = null;
+
+} );
+
+renderer.domElement.addEventListener( 'pointermove', ( e ) => {
+
+	if ( e.buttons ) return;
+	const hit = carUnderPointer( e );
+	renderer.domElement.style.cursor = hit && hit !== car ? 'pointer' : '';
+
+} );
+
+// Etiqueta com o nome sobre cada carro estacionado
+const labelPosition = new THREE.Vector3();
+
+function createCarLabel( c ) {
+
+	const el = document.createElement( 'div' );
+	el.className = 'car-label';
+	el.innerHTML = `${ c.model.name } ${ c.model.subtitle }<small>clique para dirigir</small>`;
+	el.hidden = true;
+	el.addEventListener( 'click', () => selectCar( c ) );
+	container.after( el ); // logo depois do canvas, para ficar por baixo do painel e do HUD
+	c.label = el;
+
+}
+
+function updateCarLabels() {
+
+	for ( const c of cars ) {
+
+		if ( ! c.label ) continue;
+
+		labelPosition.copy( c.position ).setY( 1.75 );
+		const distance = labelPosition.distanceTo( camera.position );
+		labelPosition.project( camera );
+
+		const visible = c !== car && labelPosition.z < 1 && distance < 45 && Math.abs( labelPosition.x ) < 1.1 && Math.abs( labelPosition.y ) < 1.1;
+		c.label.hidden = ! visible;
+		if ( ! visible ) continue;
+
+		const x = ( labelPosition.x + 1 ) / 2 * window.innerWidth;
+		const y = ( 1 - labelPosition.y ) / 2 * window.innerHeight;
+		c.label.style.transform = `translate(-50%, -100%) translate(${ x }px, ${ y }px)`;
+
+	}
+
+}
+
 // ---------------------------------------------------------------- UI
 
+// Botões de seleção de carro, gerados a partir dos modelos disponíveis
+const carOptions = document.querySelector( '[data-option="car"]' );
+for ( const c of cars ) {
+
+	const button = document.createElement( 'button' );
+	button.dataset.value = c.model.id;
+	button.textContent = c.model.name;
+	carOptions.appendChild( button );
+
+}
+
 const optionHandlers = {
+	car: ( v ) => selectCar( cars.find( ( c ) => c.model.id === v ) ),
 	camera: setCameraMode,
 	paint: ( v ) => {
 
@@ -452,7 +607,6 @@ const optionHandlers = {
 	finish: ( v ) => car.setPaintFinish( v ),
 	rims: ( v ) => car.setRims( v ),
 	calipers: ( v ) => car.setCalipers( v ),
-	spoiler: ( v ) => car.setSpoiler( v ),
 	glass: ( v ) => car.setGlass( v ),
 	interior: ( v ) => car.setInterior( v ),
 	suspension: ( v ) => car.setSuspension( v ),
@@ -464,8 +618,10 @@ document.querySelectorAll( '[data-option]' ).forEach( ( group ) => {
 
 		const button = e.target.closest( 'button[data-value]' );
 		if ( ! button ) return;
-		setActive( group.dataset.option, button.dataset.value );
-		optionHandlers[ group.dataset.option ]( button.dataset.value );
+		const option = group.dataset.option;
+		setActive( option, button.dataset.value );
+		optionHandlers[ option ]( button.dataset.value );
+		if ( option in car.settings ) car.settings[ option ] = button.dataset.value;
 		button.blur();
 
 	} );
@@ -475,6 +631,7 @@ document.querySelectorAll( '[data-option]' ).forEach( ( group ) => {
 document.getElementById( 'paint-custom' ).addEventListener( 'input', ( e ) => {
 
 	car.setPaint( e.target.value );
+	car.settings.paint = e.target.value;
 	setActive( 'paint', null );
 
 } );
@@ -600,7 +757,12 @@ function loop() {
 function frame( dt ) {
 
 	updateTweens( dt );
-	car.update( dt, busy ? IDLE_INPUT : readInput(), [ ...garage.colliders, ...worldBounds ] );
+
+	// O carro selecionado colide com a garagem, os limites do mundo e os outros carros
+	const others = cars.filter( ( c ) => c !== car ).map( ( c ) => c.footprint() );
+	car.update( dt, busy ? IDLE_INPUT : readInput(), [ ...garage.colliders, ...worldBounds, ...others ] );
+	for ( const c of cars ) if ( c !== car ) c.update( dt, IDLE_INPUT );
+
 	if ( garage.update( car ) ) toast( 'Portão reaberto: carro embaixo do portão' );
 	updateCamera( dt );
 
@@ -608,6 +770,7 @@ function frame( dt ) {
 	sun.target.position.copy( car.position );
 
 	updateHUD();
+	updateCarLabels();
 	renderer.render( scene, camera );
 
 }
@@ -622,9 +785,14 @@ window.addEventListener( 'resize', () => {
 
 // Acesso pelo console para depuração
 window.app = {
-	scene, camera, car, garage, controls, THREE, actions,
+	scene, camera, garage, controls, THREE, actions, cars,
+	get car() {
+
+		return car;
+
+	},
 	render: () => renderer.render( scene, camera ),
-	COCKPIT_EYE,
+	selectCar,
 	setCameraMode,
 	// Avança a simulação manualmente (útil quando a aba está em segundo plano)
 	tick( seconds = 1 ) {
