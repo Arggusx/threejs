@@ -608,7 +608,7 @@ export class Car {
 
 		const k = Math.min( 1, dt * 5 );
 		this._roll += ( THREE.MathUtils.clamp( latAccel * 0.0035, - 0.045, 0.045 ) - this._roll ) * k;
-		this._pitch += ( THREE.MathUtils.clamp( - longAccel * 0.0025, - 0.03, 0.03 ) - this._pitch ) * k;
+		this._pitch += ( THREE.MathUtils.clamp( longAccel * 0.0025, - 0.03, 0.03 ) - this._pitch ) * k;
 		this.chassis.rotation.set( this._pitch, 0, this._roll );
 		this.chassis.position.y = this.rideHeight;
 
