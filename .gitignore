@@ -1,2 +1,5 @@
 node_modules
 dist
+
+# arquivos originais baixados (não usados pelo app)
+assets/
