@@ -6,8 +6,9 @@ Os dois carros ficam no mundo; você dirige um de cada vez e pode trocar a qualq
 
 Modelos:
 
-- **Ferrari 458 Italia** de [vicent091036](https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6)
+- **Ferrari 458 Italia** de [vicent091036](https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6),
 - **Porsche 992 GT3 R** de [MattDoesBlender](https://sketchfab.com/3d-models/porsche-992-gt3-r-03ea07f7972648aa9350853b2a1a942a),
+- **Audi RS6 Avant 2020** de [ChoochooLi Models](https://sketchfab.com/3d-models/audi-0b9f29e1b7a6404fa4bc2cb59c536b21),
   licença [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/) (uso não comercial)
 
 ## Como rodar
@@ -53,6 +54,7 @@ src/
       index.js          lista de carros disponíveis
       ferrari.js        o que é específico da Ferrari (nomes das peças, pivôs, medidas)
       porsche.js        o que é específico do Porsche
+      audi.js           o que é específico do Audi
   world/
     garage.js           garagem com portão basculante, iluminação interna e colisores
   utils/

@@ -177,8 +177,16 @@ export class Car {
 			onUpdate: ( v ) => {
 
 				this.doors[ side ] = v;
-				pivot.rotation.y = sign * DOOR_ANGLE * v;
-				pivot.rotation.z = sign * 0.08 * v; // leve elevação, como numa porta real
+				if ( this.model.updateDoor ) {
+
+					this.model.updateDoor( this, side, v );
+
+				} else {
+
+					pivot.rotation.y = sign * DOOR_ANGLE * v;
+					pivot.rotation.z = sign * 0.08 * v; // leve elevação, como numa porta real
+
+				}
 
 			},
 		} );
