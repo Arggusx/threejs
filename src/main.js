@@ -94,6 +94,7 @@ const worldBounds = [
 const START = {
 	porsche: { position: new THREE.Vector3( 0, 0, 0 ), yaw: 0 },
 	ferrari: { position: new THREE.Vector3( - 4.5, 0, 0 ), yaw: 0 },
+	audi: { position: new THREE.Vector3( - 9.0, 0, 0 ), yaw: 0 },
 };
 
 const cars = Object.values( CAR_MODELS ).map( ( model ) => {
