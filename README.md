@@ -1,4 +1,4 @@
-# Garagem 3D — Ferrari 458 e Porsche 911 GT3 R
+# Garagem 3D
 
 Projeto em [three.js](https://threejs.org) baseado no exemplo
 [`webgl_materials_car`](https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_car.html).
