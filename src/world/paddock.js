@@ -9,7 +9,7 @@ const NAMES = {
 };
 
 // Pátio pintado no chão com uma vaga por carro e um círculo por personagem, gerado a partir do
-// LAYOUT. Assim a Vanellope e o carro dela já têm lugar marcado antes de existirem.
+// LAYOUT (os da Vanellope em verde-água).
 export function createPaddock( layout, y = 0 ) {
 
 	const group = new THREE.Group();

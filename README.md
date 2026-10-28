@@ -1,8 +1,8 @@
-# Garagem 3D — Homem-Aranha, Optimus Prime, Ferrari 458, Porsche 911 GT3 R e Audi RS6
+# Garagem 3D — Homem-Aranha, Vanellope, Optimus Prime, Ferrari 458, Porsche 911 GT3 R, Audi RS6 e Candy Kart
 
 Projeto em [three.js](https://threejs.org) baseado no exemplo
 [`webgl_materials_car`](https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_car.html).
-Você controla o Homem-Aranha a pé e pode entrar em qualquer um dos carros para dirigir. Tudo acontece num
+Você controla o Homem-Aranha ou a Vanellope a pé, e qualquer um dos dois pode entrar em qualquer carro para dirigir. Tudo acontece num
 mundo de doces no estilo Sugar Rush: carros, Homem-Aranha e Optimus começam na praça quadriculada de largada,
 em cima da pista (a ~30 m do gramado), e dá para dirigir/andar por toda a pista — subidas, descidas, pontes —
 ou descer a rampa até o gramado, onde ficam a garagem e um slalom de cones.
@@ -17,6 +17,12 @@ Modelos:
   licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
 - **Bumblebee - Optimus Prime Transform Animation** de [DIO](https://sketchfab.com/dioiiiii2)
   ([modelo](https://sketchfab.com/3d-models/bumblebee-optimus-prime-transform-animation-35f9cb09b1b248c7bd6b12912ac8cd3a)),
+  licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
+- **Disney Infinity Vanellope Von Schweetz** de [Neut2000](https://sketchfab.com/Neut2000)
+  ([modelo](https://sketchfab.com/3d-models/disney-infinity-vanellope-von-schweetz-7d25358699074ee5b99d2ee38f3a401d)),
+  licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
+- **Vanellope's Candy kart** de [Razy](https://sketchfab.com/Razy_Choco)
+  ([modelo](https://sketchfab.com/3d-models/vanellopes-candy-kart-fixed-download-2eabe6dfac114831aec5d98a03d81665)),
   licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
 - **Map_tgsd** (cenário de doces) de [amogusstrikesback2](https://sketchfab.com/amogusstrikesback2)
   ([modelo](https://sketchfab.com/3d-models/map-tgsd-6cf96205665d48b681aab3b129aa9a79)),
@@ -54,6 +60,14 @@ Abra http://localhost:5173. Para gerar a versão de produção: `npm run build` 
 A pé, chegue perto de um carro e aperte `F`: o Homem-Aranha abre a porta do motorista e entra. Com o carro
 parado, `F` de novo faz ele sair. Também dá para escolher o carro **clicando nele no mundo** (ou na etiqueta
 com o nome que aparece sobre ele) ou pelo seletor **Controle** no painel. O carro precisa estar parado para trocar.
+
+**Vanellope:** escolha-a em **Controle** no painel. Ela anda, corre e pula como o Homem-Aranha e entra em
+qualquer carro (o kart dela fica na primeira vaga; ele não tem portas, então ela entra direto). Ao trocar de
+personagem, o outro fica onde estava — a pé ou sentado no carro, parado — e não dá para entrar num carro em que
+o outro está sentado. Dançar e "vai, teia!" são só do Homem-Aranha. O modelo dela não tem esqueleto (é uma
+estátua em pose "A"): `character/autoRig.js` cria ossos com os nomes do Mixamo nas posições medidas na malha e
+distribui os pesos dos vértices por região (cabeça, tronco, braços, pernas), então `Character.js` anima os dois
+personagens com o mesmo código.
 
 **Optimus Prime:** selecione-o em **Controle** no painel. Ele começa como caminhão e é dirigido com
 `W` `A` `S` `D`; parado, `R` faz a transformação (a animação original do modelo) e, quando ela termina,
@@ -94,8 +108,7 @@ automático não desvia do relevo).
 
 Todas as posições ficam em `world/layout.js`: vagas dos carros, lugar de cada personagem, garagem, Optimus e
 slalom de cones. `world/paddock.js` pinta o pátio no chão a partir desse layout (vagas com o nome, faixa
-quadriculada e círculos dos personagens). **A Vanellope e o carro dela já têm lugar reservado** (vaga e
-círculo em verde-água): quando forem adicionados, basta usar as entradas `vanellope` e `vanellope-kart`.
+quadriculada e círculos dos personagens). A Vanellope e o kart dela usam a vaga e o círculo em verde-água.
 
 Para o navegador carregar e desenhar menos:
 - Os carros mostram as peças pequenas só a menos de 60 m da câmera, e só o carro perto da câmera (14 m) usa
@@ -124,6 +137,8 @@ src/
     spiderman.js        dados do modelo do Homem-Aranha
     dance.js            coreografia do meme (quadros-chave copiados do vídeo de referência)
     vaiTeia.js          animação do "vai, teia!" (disparo de teia sincronizado com a fala)
+    vanellope.js        dados da Vanellope: medidas do corpo e regras de peso para o rig gerado
+    autoRig.js          cria um esqueleto Mixamo para modelos estáticos e transforma em SkinnedMesh
     Optimus.js          Optimus Prime: direção como caminhão, transformação e caminhada como robô
     routine.js          interpolação das poses-chave das coreografias
   car/
@@ -133,6 +148,7 @@ src/
       ferrari.js        o que é específico da Ferrari (nomes das peças, pivôs, medidas)
       porsche.js        o que é específico do Porsche
       audi.js           o que é específico do Audi
+      vanellopeKart.js  o kart da Vanellope (sem portas, volante "invisível" para as mãos do piloto)
   world/
     garage.js           garagem com portão basculante, iluminação interna e colisores
     sugarRush.js        cenário de doces: escala, materiais e grade de obstáculos
@@ -148,6 +164,7 @@ public/                 servido como está pelo Vite
   models/porsche/       porsche_992_gt3_r.glb
   models/spiderman/     spiderman.glb
   models/optimus/       optimus.glb
+  models/vanellope/     vanellope.glb e kart.glb
   models/map/           sugar_rush.glb (cenário)
   audio/                música da dança, a fala "vai, teia!" e "Autobots, vamos rodar!"
   textures/             HDR do ambiente e sombra dos carros

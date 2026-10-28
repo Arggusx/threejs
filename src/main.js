@@ -5,6 +5,7 @@ import { Car } from './car/Car.js';
 import { CAR_MODELS } from './car/models/index.js';
 import { Character } from './character/Character.js';
 import { spiderman } from './character/spiderman.js';
+import { vanellope } from './character/vanellope.js';
 import { Optimus } from './character/Optimus.js';
 import { DANCE } from './character/dance.js';
 import { VAI_TEIA } from './character/vaiTeia.js';
@@ -91,10 +92,21 @@ const cars = Object.values( CAR_MODELS ).map( ( model ) => {
 
 let car = cars.find( ( c ) => c.model.id === 'porsche' ) ?? cars[ 0 ];
 
-const hero = new Character( spiderman );
-hero.object.position.copy( LAYOUT.characters.spiderman.position );
-hero.object.rotation.y = LAYOUT.characters.spiderman.yaw;
-scene.add( hero.object );
+// Personagens jogáveis (a pé ou dirigindo). Só um é controlado por vez (`hero`); cada um lembra em
+// qual carro está sentado (`seatedIn`), e o outro fica parado onde foi deixado.
+const heroes = [ spiderman, vanellope ].map( ( model ) => {
+
+	const h = new Character( model );
+	const start = LAYOUT.characters[ model.id ];
+	h.object.position.copy( start.position );
+	h.object.rotation.y = start.yaw;
+	h.seatedIn = null;
+	scene.add( h.object );
+	return h;
+
+} );
+const spider = heroes[ 0 ];
+let hero = spider;
 let onFoot = true;
 
 // O Optimus fica no mundo à parte: não colide com os carros (nem eles com ele).
@@ -107,7 +119,7 @@ let piloting = false;
 const controlled = () => ( piloting ? optimus : onFoot ? hero : car );
 
 const loadingBar = document.getElementById( 'loading-bar' );
-const loadables = [ world, ...cars, hero, optimus ];
+const loadables = [ world, ...cars, ...heroes, optimus ];
 const progress = loadables.map( () => 0 );
 
 Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
@@ -422,6 +434,7 @@ let playing = null;
 function playRoutine( name ) {
 
 	if ( ! onFoot || busy ) return;
+	if ( hero !== spider ) return toast( 'Essa é do Homem-Aranha' );
 	const was = playing;
 	if ( hero.dancing ) hero.stopDance();
 	if ( was === name || ! hero.grounded ) return;
@@ -436,7 +449,7 @@ function playRoutine( name ) {
 
 }
 
-hero.onDanceEnd = () => {
+spider.onDanceEnd = () => {
 
 	ROUTINES[ playing ]?.audio.pause();
 	if ( playing ) setActiveAction( playing, false );
@@ -444,7 +457,7 @@ hero.onDanceEnd = () => {
 
 };
 
-hero.onRoutineEvent = ( name ) => name === 'web' && shootWeb();
+spider.onRoutineEvent = ( name ) => name === 'web' && shootWeb();
 
 const autobotsAudio = new Audio( './audio/autobots-vamos-rodar.mp3' );
 autobotsAudio.preload = 'auto';
@@ -467,8 +480,8 @@ let webCount = 0;
 
 function shootWeb() {
 
-	const from = hero.bones.RightHand.getWorldPosition( new THREE.Vector3() );
-	const elbow = hero.bones.RightForeArm.getWorldPosition( new THREE.Vector3() );
+	const from = spider.bones.RightHand.getWorldPosition( new THREE.Vector3() );
+	const elbow = spider.bones.RightForeArm.getWorldPosition( new THREE.Vector3() );
 	const dir = from.clone().sub( elbow ).setY( 0 ).normalize().setY( 0.05 ).normalize();
 
 	webRay.set( from, dir );
@@ -533,9 +546,9 @@ function nearestCar() {
 
 const GRIP_RADIUS = 0.17;
 
-function steeringGrip() {
+function steeringGrip( c = car ) {
 
-	const wheel = car.steeringWheel;
+	const wheel = c.steeringWheel;
 	wheel.updateWorldMatrix( true, false );
 	const center = wheel.getWorldPosition( new THREE.Vector3() );
 	const side = new THREE.Vector3( 1, 0, 0 ).applyQuaternion( wheel.getWorldQuaternion( new THREE.Quaternion() ) ).multiplyScalar( GRIP_RADIUS );
@@ -570,6 +583,9 @@ function seatPosition( c ) {
 
 function enterCar( next ) {
 
+	const occupant = heroes.find( ( h ) => h !== hero && h.seatedIn === next );
+	if ( occupant ) return toast( `${ occupant.model.name } está nesse carro` );
+
 	return runSequence( `Entrando: ${ next.model.name }…`, async () => {
 
 		const near = hero.position.distanceTo( next.position ) < next.model.halfLength + 2;
@@ -577,6 +593,7 @@ function enterCar( next ) {
 
 		hero.stopDance();
 		hero.sit( next.chassis, seatPosition( next ) );
+		hero.seatedIn = next;
 		onFoot = false;
 		car = next;
 		syncPanel();
@@ -612,6 +629,7 @@ function exitCar() {
 		}
 
 		hero.stand( scene, spot, yaw );
+		hero.seatedIn = null;
 		onFoot = true;
 		syncPanel();
 		setCameraMode( cameraMode );
@@ -829,6 +847,8 @@ function selectCar( next ) {
 			setCameraMode( cameraMode );
 			if ( next !== hero && ( onFoot || next !== car ) ) return selectCar( next );
 			if ( next === hero && ! onFoot ) return exitCar();
+			setActive( 'car', controlled().model.id );
+			return;
 
 		}
 
@@ -838,9 +858,33 @@ function selectCar( next ) {
 
 	}
 
-	if ( next === hero ) {
+	const occupant = heroes.find( ( h ) => h !== hero && h.seatedIn === next );
+
+	if ( heroes.includes( next ) && next !== hero ) {
+
+		// Troca de personagem: o atual fica onde está (a pé ou sentado no carro, parado).
+		if ( busy ) toast( 'Aguarde' );
+		else if ( ! onFoot && Math.abs( car.speed ) > 0.5 ) toast( 'Pare o carro antes de trocar' );
+		else {
+
+			if ( ! onFoot ) car.speed = 0;
+			hero.stopDance();
+			hero = next;
+			onFoot = ! hero.seatedIn;
+			if ( hero.seatedIn ) car = hero.seatedIn;
+			syncPanel();
+			setCameraMode( cameraMode );
+			toast( onFoot ? `Controlando: ${ hero.model.name }` : `${ hero.model.name } dirigindo: ${ car.model.name }` );
+
+		}
+
+	} else if ( next === hero ) {
 
 		if ( ! onFoot && ! busy ) exitCar();
+
+	} else if ( occupant ) {
+
+		toast( `${ occupant.model.name } está nesse carro: troque para ${ occupant.model.name } para dirigir` );
 
 	} else if ( next && onFoot ) {
 
@@ -856,6 +900,7 @@ function selectCar( next ) {
 			car.speed = 0;
 			car = next;
 			hero.sit( car.chassis, seatPosition( car ) );
+			hero.seatedIn = car;
 			lastCarPosition.copy( car.position );
 			syncPanel();
 			setCameraMode( cameraMode );
@@ -874,6 +919,8 @@ function syncPanel() {
 	const panel = document.getElementById( 'panel' );
 	panel.classList.toggle( 'on-foot', onFoot );
 	panel.classList.toggle( 'optimus', piloting );
+	panel.classList.toggle( 'spiderman', hero === spider );
+	panel.classList.toggle( 'no-custom', ! onFoot && car.model.customizable === false );
 	setActive( 'car', controlled().model.id );
 	if ( piloting ) {
 
@@ -979,7 +1026,7 @@ function updateCarLabels() {
 }
 
 const carOptions = document.querySelector( '[data-option="car"]' );
-for ( const c of [ hero, ...cars, optimus ] ) {
+for ( const c of [ ...heroes, ...cars, optimus ] ) {
 
 	const button = document.createElement( 'button' );
 	button.dataset.value = c.model.id;
@@ -989,7 +1036,7 @@ for ( const c of [ hero, ...cars, optimus ] ) {
 }
 
 const optionHandlers = {
-	car: ( v ) => selectCar( [ hero, ...cars, optimus ].find( ( c ) => c.model.id === v ) ),
+	car: ( v ) => selectCar( [ ...heroes, ...cars, optimus ].find( ( c ) => c.model.id === v ) ),
 	camera: setCameraMode,
 	quality: ( v ) => {
 
@@ -1274,7 +1321,7 @@ function placeOnTrack() {
 
 	// Todos nascem na praça (a ponte do arco-íris passa por cima dela, por isso a referência é a praça).
 	const plazaY = world.plaza.max.y;
-	for ( const c of [ ...cars, hero, optimus ] ) {
+	for ( const c of [ ...cars, ...heroes, optimus ] ) {
 
 		c.terrain = terrain;
 		c.object.position.y = terrain.height( c.position.x, c.position.z, plazaY, 1 );
@@ -1327,6 +1374,23 @@ function frame( dt ) {
 	}
 	if ( ! onFoot ) hero.update( dt, { hands: steeringGrip() } );
 	hero.object.visible = piloting || onFoot || cameraMode !== 'cockpit';
+
+	// Quem não está sendo controlado fica parado: sentado no carro dele ou de pé onde foi deixado.
+	for ( const h of heroes ) {
+
+		if ( h === hero ) continue;
+		if ( h.seatedIn ) {
+
+			h.update( dt, { hands: steeringGrip( h.seatedIn ) } );
+
+		} else {
+
+			h.update( dt, IDLE_HERO_INPUT, withTerrain( colliders, terrainBlockers.hero, h ) );
+			colliders.pop();
+
+		}
+
+	}
 	for ( const c of cars ) if ( c !== driven ) c.update( dt, IDLE_INPUT );
 
 	if ( garage.update( t ) ) toast( onFoot ? 'Portão reaberto: tem alguém embaixo' : 'Portão reaberto: carro embaixo do portão' );
@@ -1352,7 +1416,12 @@ window.addEventListener( 'resize', () => {
 } );
 
 window.app = {
-	scene, camera, garage, controls, THREE, actions, cars, hero, optimus, renderer, world,
+	scene, camera, garage, controls, THREE, actions, cars, heroes, optimus, renderer, world,
+	get hero() {
+
+		return hero;
+
+	},
 	get onFoot() {
 
 		return onFoot;

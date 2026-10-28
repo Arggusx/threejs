@@ -72,7 +72,8 @@ export class Character {
 	async load( onProgress ) {
 
 		const gltf = await loader.loadAsync( this.model.url, ( e ) => e.total && onProgress?.( e.loaded / e.total ) );
-		const scene = gltf.scene;
+		// Modelos sem esqueleto (como a Vanellope) geram um rig compatível em `prepare`.
+		const scene = this.model.prepare ? this.model.prepare( gltf.scene ) : gltf.scene;
 
 		scene.traverse( ( o ) => {
 
@@ -190,7 +191,7 @@ export class Character {
 	eyePosition( target = new THREE.Vector3() ) {
 
 		this.bones.Head.getWorldPosition( target );
-		return target.addScaledVector( this.forward(), 0.14 ).add( new THREE.Vector3( 0, 0.08, 0 ) );
+		return target.addScaledVector( this.forward(), this.model.eyeForward ?? 0.14 ).add( new THREE.Vector3( 0, this.model.eyeUp ?? 0.08, 0 ) );
 
 	}
 

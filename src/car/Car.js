@@ -199,6 +199,9 @@ export class Car {
 
 	setDoor( side, open ) {
 
+		// Carros sem porta (o kart): o piloto entra e sai direto.
+		if ( this.model.doors === false ) return Promise.resolve();
+
 		this.doorTargets[ side ] = open;
 		const from = this.doors[ side ];
 		const to = open ? 1 : 0;

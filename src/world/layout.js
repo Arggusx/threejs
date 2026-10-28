@@ -10,7 +10,7 @@ import * as THREE from 'three';
 //  ← pista   vanellope      homem-aranha       Optimus
 //              rampa ↓ (sul, +Z) até o gramado, onde ficam a garagem e o slalom de cones
 //
-// A Vanellope e o carro dela ainda vão ser adicionados; os lugares já ficam reservados aqui.
+// A Vanellope e o kart dela ficam do lado esquerdo (vaga e círculo em verde-água).
 const spot = ( x, z, yaw = 0 ) => ( { position: new THREE.Vector3( x, 0, z ), yaw } );
 
 export const LAYOUT = {
