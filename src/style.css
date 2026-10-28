@@ -256,3 +256,5 @@ section > .seg.small:first-of-type { margin-top: 0; }
 
 #panel.on-foot .car-only { display: none; }
 #panel:not(.on-foot) .foot-only { display: none; }
+#panel.optimus .car-only, #panel.optimus .foot-only, #panel.optimus .no-optimus { display: none; }
+#panel:not(.optimus) .optimus-only { display: none; }

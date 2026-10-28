@@ -5,6 +5,7 @@ import { Car } from './car/Car.js';
 import { CAR_MODELS } from './car/models/index.js';
 import { Character } from './character/Character.js';
 import { spiderman } from './character/spiderman.js';
+import { Optimus } from './character/Optimus.js';
 import { DANCE } from './character/dance.js';
 import { VAI_TEIA } from './character/vaiTeia.js';
 import { Garage } from './world/garage.js';
@@ -110,10 +111,16 @@ hero.object.position.set( 2.4, 0, 3.2 );
 scene.add( hero.object );
 let onFoot = true;
 
-const controlled = () => ( onFoot ? hero : car );
+// O Optimus fica no mundo à parte: não colide com os carros (nem eles com ele).
+const optimus = new Optimus();
+optimus.object.position.set( 9, 0, 1 );
+scene.add( optimus.object );
+let piloting = false;
+
+const controlled = () => ( piloting ? optimus : onFoot ? hero : car );
 
 const loadingBar = document.getElementById( 'loading-bar' );
-const loadables = [ ...cars, hero ];
+const loadables = [ ...cars, hero, optimus ];
 const progress = loadables.map( () => 0 );
 
 Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
@@ -149,6 +156,14 @@ window.addEventListener( 'keydown', ( e ) => {
 
 	keys.add( e.code );
 
+	if ( piloting ) {
+
+		if ( e.code === 'KeyC' ) setCameraMode( CAMERA_MODES[ ( CAMERA_MODES.indexOf( cameraMode ) + 1 ) % CAMERA_MODES.length ] );
+		else if ( e.code === 'KeyR' ) actions.transform();
+		return;
+
+	}
+
 	switch ( e.code ) {
 
 		case 'KeyL': actions.lights(); break;
@@ -182,8 +197,10 @@ function readInput() {
 }
 
 const heroInput = { move: new THREE.Vector3(), turn: 0, run: false, jump: false, lockFacing: false };
+const IDLE_HERO_INPUT = { move: new THREE.Vector3(), turn: 0, run: false, jump: false, lockFacing: false };
+const ahead = new THREE.Vector3();
 
-function readHeroInput() {
+function readHeroInput( who = hero ) {
 
 	const i = busy ? IDLE_INPUT : readInput();
 	const forward = i.throttle - i.brake;
@@ -194,14 +211,13 @@ function readHeroInput() {
 	if ( heroInput.lockFacing ) {
 
 		heroInput.turn = i.steer;
-		hero.forward( heroInput.move ).multiplyScalar( forward );
+		who.forward( heroInput.move ).multiplyScalar( forward );
 
 	} else {
 
 		heroInput.turn = 0;
-		const ahead = camera.getWorldDirection( new THREE.Vector3() ).setY( 0 ).normalize();
-		const right = new THREE.Vector3( - ahead.z, 0, ahead.x );
-		heroInput.move.copy( ahead ).multiplyScalar( forward ).addScaledVector( right, - i.steer );
+		camera.getWorldDirection( ahead ).setY( 0 ).normalize();
+		heroInput.move.copy( ahead ).multiplyScalar( forward ).add( tmp.set( ahead.z, 0, - ahead.x ).multiplyScalar( i.steer ) );
 		if ( heroInput.move.lengthSq() > 1 ) heroInput.move.normalize();
 
 	}
@@ -222,11 +238,23 @@ function setCameraMode( mode ) {
 	camera.fov = mode === 'cockpit' ? 62 : 40;
 	camera.updateProjectionMatrix();
 
+	controls.maxDistance = piloting ? 40 : 14;
+
 	if ( mode === 'orbit' ) {
 
 		const t = controlled();
-		controls.target.copy( t.position ).setY( onFoot ? 1.1 : 0.5 );
-		camera.position.copy( t.object.localToWorld( onFoot ? tmp.set( 1.6, 2.0, 3.6 ) : tmp.set( 4.5, 1.6, - 4.5 ) ) );
+		if ( piloting ) {
+
+			const h = optimus.height;
+			controls.target.copy( t.position ).setY( h * 0.5 );
+			camera.position.copy( t.object.localToWorld( tmp.set( h * 1.4, h * 0.8, h * 2.6 ) ) );
+
+		} else {
+
+			controls.target.copy( t.position ).setY( onFoot ? 1.1 : 0.5 );
+			camera.position.copy( t.object.localToWorld( onFoot ? tmp.set( 1.6, 2.0, 3.6 ) : tmp.set( 4.5, 1.6, - 4.5 ) ) );
+
+		}
 		lastCarPosition.copy( t.position );
 
 	}
@@ -243,9 +271,31 @@ function updateCamera( dt ) {
 
 	if ( cameraMode === 'orbit' ) {
 
+		// O Optimus muda de altura ao se transformar; a câmera acompanha.
+		if ( piloting ) delta.y = ( optimus.height * 0.5 - controls.target.y ) * ( 1 - Math.exp( - dt * 2 ) );
 		camera.position.add( delta );
 		controls.target.add( delta );
+		if ( piloting ) {
+
+			const away = camera.position.clone().sub( controls.target );
+			const min = optimus.height * 1.8;
+			if ( away.length() < min ) camera.position.copy( controls.target ).add( away.setLength( THREE.MathUtils.lerp( away.length(), min, 1 - Math.exp( - dt * 2 ) ) ) );
+
+		}
 		controls.update();
+
+	} else if ( piloting && cameraMode === 'chase' ) {
+
+		const h = optimus.height;
+		const desired = optimus.object.localToWorld( tmp.set( 0, h * 0.9, h * 2.2 ) );
+		camera.position.lerp( desired, 1 - Math.exp( - dt * 4 ) );
+		camera.lookAt( optimus.object.localToWorld( tmp.set( 0, h * 0.55, - h ) ) );
+
+	} else if ( piloting ) {
+
+		const eye = optimus.eyePosition( new THREE.Vector3() );
+		camera.position.copy( eye );
+		camera.lookAt( eye.addScaledVector( optimus.forward( tmp ), 10 ).setY( eye.y - 1 ) );
 
 	} else if ( onFoot && cameraMode === 'chase' ) {
 
@@ -312,6 +362,16 @@ const actions = {
 	dance: () => playRoutine( 'dance' ),
 	web: () => playRoutine( 'web' ),
 
+	transform() {
+
+		if ( ! piloting ) return;
+		if ( Math.abs( optimus.speed ) > 0.5 ) return toast( 'Pare o Optimus para se transformar' );
+		if ( ! optimus.transform() ) return;
+		autobotsAudio.pause();
+		syncPanel();
+
+	},
+
 	vehicle() {
 
 		if ( busy ) return;
@@ -374,6 +434,21 @@ hero.onDanceEnd = () => {
 };
 
 hero.onRoutineEvent = ( name ) => name === 'web' && shootWeb();
+
+const autobotsAudio = new Audio( './audio/autobots-vamos-rodar.mp3' );
+autobotsAudio.preload = 'auto';
+
+optimus.onTransformEnd = ( form ) => {
+
+	if ( form === 'robot' ) {
+
+		autobotsAudio.currentTime = 0;
+		autobotsAudio.play().catch( () => {} );
+
+	}
+	syncPanel();
+
+};
 
 const webMaterial = new THREE.MeshStandardMaterial( { color: 0xf4f4f4, roughness: 0.6, emissive: 0x666666, transparent: true } );
 const webRay = new THREE.Raycaster();
@@ -720,6 +795,36 @@ async function closeCarDoors() {
 
 function selectCar( next ) {
 
+	if ( next === optimus || piloting ) {
+
+		if ( busy ) return toast( 'Aguarde' );
+		if ( optimus.transforming ) return toast( 'Aguarde a transformação terminar' );
+		if ( next === optimus && ! piloting && ! onFoot && Math.abs( car.speed ) > 0.5 ) return toast( 'Pare o carro antes de trocar' );
+		if ( next === optimus && piloting ) return setActive( 'car', 'optimus' );
+
+		piloting = next === optimus;
+		if ( piloting ) {
+
+			car.speed = Math.abs( car.speed ) < 0.5 ? 0 : car.speed;
+			toast( 'Optimus Prime: R para transformar' );
+
+		} else {
+
+			optimus.speed = 0;
+			// Volta para o Homem-Aranha (a pé ou no carro em que ele está) e segue com a troca pedida.
+			syncPanel();
+			setCameraMode( cameraMode );
+			if ( next !== hero && ( onFoot || next !== car ) ) return selectCar( next );
+			if ( next === hero && ! onFoot ) return exitCar();
+
+		}
+
+		syncPanel();
+		setCameraMode( cameraMode );
+		return;
+
+	}
+
 	if ( next === hero ) {
 
 		if ( ! onFoot && ! busy ) exitCar();
@@ -753,8 +858,16 @@ function selectCar( next ) {
 
 function syncPanel() {
 
-	document.getElementById( 'panel' ).classList.toggle( 'on-foot', onFoot );
+	const panel = document.getElementById( 'panel' );
+	panel.classList.toggle( 'on-foot', onFoot );
+	panel.classList.toggle( 'optimus', piloting );
 	setActive( 'car', controlled().model.id );
+	if ( piloting ) {
+
+		document.getElementById( 'car-title' ).innerHTML = `${ optimus.model.name } <span>${ optimus.subtitle }</span>`;
+		return;
+
+	}
 	if ( onFoot ) {
 
 		document.getElementById( 'car-title' ).innerHTML = `${ hero.model.name } <span>${ hero.model.subtitle }</span>`;
@@ -853,7 +966,7 @@ function updateCarLabels() {
 }
 
 const carOptions = document.querySelector( '[data-option="car"]' );
-for ( const c of [ hero, ...cars ] ) {
+for ( const c of [ hero, ...cars, optimus ] ) {
 
 	const button = document.createElement( 'button' );
 	button.dataset.value = c.model.id;
@@ -863,7 +976,7 @@ for ( const c of [ hero, ...cars ] ) {
 }
 
 const optionHandlers = {
-	car: ( v ) => selectCar( [ hero, ...cars ].find( ( c ) => c.model.id === v ) ),
+	car: ( v ) => selectCar( [ hero, ...cars, optimus ].find( ( c ) => c.model.id === v ) ),
 	camera: setCameraMode,
 	quality: ( v ) => {
 
@@ -919,7 +1032,7 @@ document.querySelectorAll( '[data-action]' ).forEach( ( button ) => {
 
 	button.addEventListener( 'click', () => {
 
-		actions[ button.dataset.action ]();
+		if ( piloting === ( button.dataset.action === 'transform' ) ) actions[ button.dataset.action ]();
 		button.blur();
 
 	} );
@@ -965,6 +1078,7 @@ function updateActionLabels() {
 	if ( onFoot ) setLabel( 'garage', garage.doorTarget ? 'Fechar portão' : 'Abrir portão' );
 	else setLabel( 'garage', garage.contains( car.position ) ? 'Sair da garagem' : 'Ir para a garagem' );
 	setLabel( 'vehicle', onFoot ? 'Entrar no carro' : 'Sair do carro' );
+	setLabel( 'transform', optimus.form === 'robot' ? 'Virar caminhão' : optimus.transforming ? 'Transformando…' : 'Transformar' );
 
 }
 
@@ -986,8 +1100,8 @@ function updateHUD() {
 
 	const t = controlled();
 	speedEl.textContent = Math.round( Math.abs( t.speed ) * 3.6 );
-	gearEl.hidden = onFoot;
-	gearEl.textContent = car.speed < - 0.1 ? 'R' : car.speed > 0.1 ? 'D' : 'N';
+	gearEl.hidden = piloting ? optimus.form !== 'truck' : onFoot;
+	gearEl.textContent = t.speed < - 0.1 ? 'R' : t.speed > 0.1 ? 'D' : 'N';
 	updateActionLabels();
 
 }
@@ -1106,25 +1220,38 @@ function autoQuality( dt ) {
 
 }
 
+const staticColliders = [];
+const colliders = [];
+const carFootprints = cars.map( () => new THREE.Box2() );
+
 function frame( dt ) {
 
 	updateTweens( dt );
 
 	const t = controlled();
-	const others = cars.filter( ( c ) => c !== t ).map( ( c ) => c.footprint() );
-	const colliders = [ ...garage.colliders, ...worldBounds, ...others ];
+	const driven = onFoot ? null : car;
+
+	// Colisores reaproveitados entre quadros para não gerar lixo a cada frame.
+	staticColliders.length = 0;
+	staticColliders.push( ...garage.colliders, ...worldBounds );
+	colliders.length = 0;
+	colliders.push( ...staticColliders );
+	cars.forEach( ( c, i ) => c !== driven && colliders.push( c.footprint( carFootprints[ i ] ) ) );
+
+	if ( piloting ) optimus.update( dt, optimus.form === 'truck' ? ( busy ? IDLE_INPUT : readInput() ) : readHeroInput( optimus ), staticColliders );
+	else optimus.update( dt, optimus.form === 'truck' ? IDLE_INPUT : IDLE_HERO_INPUT );
 
 	if ( onFoot ) {
 
-		const i = readHeroInput();
+		const i = piloting ? IDLE_HERO_INPUT : readHeroInput();
 		if ( hero.dancing && ( i.move.lengthSq() > 0 || i.turn || i.jump ) ) hero.stopDance();
 		hero.update( dt, i, colliders );
 
 	}
-	else car.update( dt, busy ? IDLE_INPUT : readInput(), colliders );
+	else car.update( dt, busy || piloting ? IDLE_INPUT : readInput(), colliders );
 	if ( ! onFoot ) hero.update( dt, { hands: steeringGrip() } );
-	hero.object.visible = onFoot || cameraMode !== 'cockpit';
-	for ( const c of cars ) if ( c !== t ) c.update( dt, IDLE_INPUT );
+	hero.object.visible = piloting || onFoot || cameraMode !== 'cockpit';
+	for ( const c of cars ) if ( c !== driven ) c.update( dt, IDLE_INPUT );
 
 	if ( garage.update( t ) ) toast( onFoot ? 'Portão reaberto: tem alguém embaixo' : 'Portão reaberto: carro embaixo do portão' );
 	updateCamera( dt );
@@ -1147,7 +1274,7 @@ window.addEventListener( 'resize', () => {
 } );
 
 window.app = {
-	scene, camera, garage, controls, THREE, actions, cars, hero,
+	scene, camera, garage, controls, THREE, actions, cars, hero, optimus, renderer,
 	get onFoot() {
 
 		return onFoot;

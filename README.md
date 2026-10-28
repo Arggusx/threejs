@@ -1,4 +1,4 @@
-# Garagem 3D — Homem-Aranha, Ferrari 458, Porsche 911 GT3 R e Audi RS6
+# Garagem 3D — Homem-Aranha, Optimus Prime, Ferrari 458, Porsche 911 GT3 R e Audi RS6
 
 Projeto em [three.js](https://threejs.org) baseado no exemplo
 [`webgl_materials_car`](https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_car.html).
@@ -11,6 +11,9 @@ Modelos:
 - **Audi RS6 Avant 2020** de [ChoochooLi Models](https://sketchfab.com/3d-models/audi-0b9f29e1b7a6404fa4bc2cb59c536b21),
   licença [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/) (uso não comercial)
 - **The Amazing Spider-Man 2 Spider-Man** de [fredbear1211](https://sketchfab.com/3d-models/the-amazing-spider-man-2-spider-man-def66432d0434cceb2e2ad260a94b5af),
+  licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
+- **Bumblebee - Optimus Prime Transform Animation** de [DIO](https://sketchfab.com/dioiiiii2)
+  ([modelo](https://sketchfab.com/3d-models/bumblebee-optimus-prime-transform-animation-35f9cb09b1b248c7bd6b12912ac8cd3a)),
   licença [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/)
 
 ## Como rodar
@@ -40,10 +43,17 @@ Abra http://localhost:5173. Para gerar a versão de produção: `npm run build` 
 | `H` | Pisca-alerta |
 | `C` | Alternar câmera (livre, perseguição, cockpit) |
 | `T` | Trocar de carro (dirigindo) |
+| `R` | Transformar o Optimus (caminhão ↔ robô) |
 
 A pé, chegue perto de um carro e aperte `F`: o Homem-Aranha abre a porta do motorista e entra. Com o carro
 parado, `F` de novo faz ele sair. Também dá para escolher o carro **clicando nele no mundo** (ou na etiqueta
 com o nome que aparece sobre ele) ou pelo seletor **Controle** no painel. O carro precisa estar parado para trocar.
+
+**Optimus Prime:** selecione-o em **Controle** no painel. Ele começa como caminhão e é dirigido com
+`W` `A` `S` `D`; parado, `R` faz a transformação (a animação original do modelo) e, quando ela termina,
+toca "Autobots, vamos rodar!". Como robô ele anda como uma pessoa (`Shift` corre) — a caminhada é feita
+girando os ossos do rig Biped em `Optimus.js`. `R` de novo volta para caminhão. Ele não colide com os carros
+nem com o Homem-Aranha (só com a garagem e os limites do mundo). Para voltar, escolha outro personagem/carro no painel.
 
 Na câmera livre o Homem-Aranha anda na direção da câmera; nas câmeras de perseguição e primeira pessoa,
 `A`/`D` giram o personagem. O modelo não tem animações: o ciclo de caminhada/corrida/pulo é feito girando os
@@ -52,6 +62,11 @@ ossos do rig (Mixamo) via código em `Character.js`.
 Em **Gráficos** (painel) dá para escolher a qualidade: **Baixo** (sem sombras, resolução 1:1), **Médio**
 (sombra menor, vidro sem refração) ou **Alto**. Na primeira visita o jogo começa no Alto, mede o tempo
 dos quadros e desce de nível sozinho se ficar abaixo de ~25 fps; uma escolha manual fica salva no navegador.
+
+Para o navegador carregar e desenhar menos: os `.glb` usam geometria Draco e texturas WebP (no máximo
+2048 px nos carros e no Homem-Aranha, 1024 px no Optimus), e ao carregar `utils/merge.js` junta as peças
+que se movem juntas e têm o mesmo material. No Optimus, as ~260 peças animadas viram uma malha com
+esqueleto por material (~14 chamadas de desenho em vez de ~260), sem perder a animação de transformação.
 
 O painel lateral permite mudar **cor e acabamento da pintura**, **acabamento das rodas**,
 **cor das pinças de freio**, **aerofólio** (só na Ferrari — o GT3 R já tem asa), **tom dos vidros**,
@@ -68,6 +83,7 @@ src/
     spiderman.js        dados do modelo do Homem-Aranha
     dance.js            coreografia do meme (quadros-chave copiados do vídeo de referência)
     vaiTeia.js          animação do "vai, teia!" (disparo de teia sincronizado com a fala)
+    Optimus.js          Optimus Prime: direção como caminhão, transformação e caminhada como robô
     routine.js          interpolação das poses-chave das coreografias
   car/
     Car.js              carro genérico: física (modelo de bicicleta), portas, luzes e peças
@@ -80,11 +96,13 @@ src/
     garage.js           garagem com portão basculante, iluminação interna e colisores
   utils/
     tween.js            mini sistema de animações
+    merge.js            junta malhas para reduzir chamadas de desenho
 public/                 servido como está pelo Vite
   models/ferrari/       ferrari.glb
   models/porsche/       porsche_992_gt3_r.glb
   models/spiderman/     spiderman.glb
-  audio/                música da dança e a fala "vai, teia!"
+  models/optimus/       optimus.glb
+  audio/                música da dança, a fala "vai, teia!" e "Autobots, vamos rodar!"
   textures/             HDR do ambiente e sombra dos carros
   draco/                decodificador Draco
 assets/source/          arquivos originais baixados (não são usados pelo app)
