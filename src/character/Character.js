@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 const WALK_SPEED = 1.8;
 const RUN_SPEED = 7;
@@ -14,7 +15,7 @@ const AXIS_X = new THREE.Vector3( 1, 0, 0 );
 const AXIS_Y = new THREE.Vector3( 0, 1, 0 );
 const AXIS_Z = new THREE.Vector3( 0, 0, 1 );
 
-const loader = new GLTFLoader();
+const loader = new GLTFLoader().setDRACOLoader( new DRACOLoader().setDecoderPath( './draco/' ) );
 
 export class Character {
 

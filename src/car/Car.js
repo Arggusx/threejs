@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { animate, ease } from '../utils/tween.js';
+import { mergeStaticMeshes } from '../utils/merge.js';
 
 const MAX_STEER = 0.6;
 const MAX_SPEED = 75;
@@ -121,6 +122,13 @@ export class Car {
 			}
 
 		} );
+
+		// Junta as peças que andam juntas e têm o mesmo material: centenas de malhas viram poucas dezenas.
+		mergeStaticMeshes( this.root, [
+			this.chassis, this.steeringWheel, ...this.wheels, ...this.frontPivots,
+			...Object.values( this.doorPivots ), ...Object.values( this.spoilers ?? {} ),
+			...( this.model.movingParts?.( this ) ?? [] ),
+		] );
 
 		const shadow = new THREE.Mesh(
 			new THREE.PlaneGeometry( ...this.model.shadowSize ),

@@ -62,6 +62,16 @@ export const audi = {
 
 	},
 
+	// Nós animados pelas portas: precisam continuar separados quando as malhas forem juntadas.
+	movingParts( car ) {
+
+		return Object.values( car.doorActions )
+			.flatMap( ( action ) => action.getClip().tracks )
+			.map( ( track ) => car.chassis.getObjectByName( THREE.PropertyBinding.parseTrackName( track.name ).nodeName ) )
+			.filter( Boolean );
+
+	},
+
 	updateDoor( car, side, progress ) {
 
 		const action = car.doorActions[ side ];
