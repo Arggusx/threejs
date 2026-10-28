@@ -470,6 +470,7 @@ export class Car {
 
 		this.followGround( dt );
 		this.updateVisuals( dt );
+		this.model.animate?.( this, dt, input );
 
 	}
 

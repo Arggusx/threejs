@@ -54,7 +54,8 @@ function weigh( v ) {
 
 	let segments;
 	if ( v.y < 0.19 ) segments = REGIONS[ v.x >= 0 ? 'LeftLeg' : 'RightLeg' ];
-	else if ( Math.abs( v.x ) > 0.125 && v.y > 0.22 ) segments = REGIONS[ v.x >= 0 ? 'LeftArm' : 'RightArm' ];
+	// A saia abre até |x| ~0,2 abaixo de 0,27: fica no tronco (senão estica junto com os braços).
+	else if ( Math.abs( v.x ) > 0.125 && v.y > 0.22 && ! ( v.y < 0.27 && Math.abs( v.x ) < 0.2 ) ) segments = REGIONS[ v.x >= 0 ? 'LeftArm' : 'RightArm' ];
 	else segments = TORSO;
 
 	// Peso pelo inverso da distância a cada segmento; os dois mais próximos dividem o vértice.

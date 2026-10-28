@@ -32,3 +32,36 @@ export const LAYOUT = {
 	// Limite do mundo (as montanhas no horizonte ficam além dele).
 	worldLimit: 330,
 };
+
+// Área aberta (como na primeira versão): chão plano e liso, sem o cenário de doces nem obstáculos.
+// Fica no mesmo lugar do mapa, que é escondido enquanto ela está ativa.
+export const ARENA = {
+	garage: new THREE.Vector3( 14, 0, - 22 ),
+	cars: {
+		porsche: spot( 0, 0 ),
+		ferrari: spot( - 4.5, 0 ),
+		audi: spot( - 9, 0 ),
+		'vanellope-kart': spot( - 13.5, 0 ),
+	},
+	characters: {
+		spiderman: spot( 2.4, 3.2 ),
+		vanellope: spot( - 1.6, 3.2 ),
+	},
+	optimus: spot( 10, 1 ),
+};
+
+// Cones da área aberta: uma linha reta e um oval com corredor, como no começo do projeto.
+export function arenaConeSpots() {
+
+	const spots = [];
+	for ( let i = 0; i < 8; i ++ ) spots.push( [ - 10, - 8 - i * 12 ] );
+	for ( let i = 0; i < 48; i ++ ) {
+
+		const a = ( i / 48 ) * Math.PI * 2;
+		spots.push( [ 30 + Math.cos( a ) * 40, 40 + Math.sin( a ) * 22 ] );
+		if ( i % 2 === 0 ) spots.push( [ 30 + Math.cos( a ) * 30, 40 + Math.sin( a ) * 12 ] );
+
+	}
+	return spots;
+
+}

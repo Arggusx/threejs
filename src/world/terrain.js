@@ -69,13 +69,31 @@ export class Terrain {
 		const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
 		const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
 		const steep = Math.abs( ny ) < STEEP * Math.hypot( nx, ny, nz );
-		const bottom = Math.min( a.y, b.y, c.y ), top = Math.max( a.y, b.y, c.y );
+
+		// Paredes/encostas: amostra a superfície do triângulo em 3D e marca só a altura real de cada
+		// ponto. (Marcar a faixa inteira do triângulo em toda a área dele criava "paredes fantasma"
+		// em cima da pista, debaixo de encostas grandes.)
+		if ( steep ) {
+
+			const spacing = Math.min( s, BIN ) * 0.8;
+			const n = Math.max( 1, Math.ceil( Math.max( a.distanceTo( b ), b.distanceTo( c ), c.distanceTo( a ) ) / spacing ) );
+			for ( let i = 0; i <= n; i ++ ) for ( let j = 0; j <= n - i; j ++ ) {
+
+				const u = i / n, v = j / n;
+				const x = a.x + ux * u + vx * v, y = a.y + uy * u + vy * v, z = a.z + uz * u + vz * v;
+				const ix = Math.round( ( x - ox ) / s ), iz = Math.round( ( z - oz ) / s );
+				if ( ix >= 0 && iz >= 0 && ix < this.nx && iz < this.nz ) this.markSolid( ix, iz, y, y );
+
+			}
+
+			return;
+
+		}
 
 		const mark = ( ix, iz, h ) => {
 
 			if ( ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz ) return;
-			if ( steep ) this.markSolid( ix, iz, bottom, top );
-			else if ( floor ) this.insertFloor( ix, iz, h );
+			if ( floor ) this.insertFloor( ix, iz, h );
 			else this.markSolid( ix, iz, h, h );
 
 		};
@@ -225,6 +243,9 @@ export class Terrain {
 
 	// "Colisor" no mesmo formato das caixas (`containsPoint`), relativo à altura de quem se move:
 	// atualize `y` antes de mover.
+	// Um obstáculo só bloqueia se vem do chão (tem algo também entre 25 e 50 cm acima do chão
+	// daquele ponto, como paredes, troncos e pilares). Enfeites flutuando sobre a pista — doces, faixas, arcos — são atravessados,
+	// como na pista de kart original.
 	blocker( { step, drop, height } ) {
 
 		const terrain = this;
@@ -233,7 +254,14 @@ export class Terrain {
 			containsPoint( p ) {
 
 				const y = this.y;
-				return terrain.floor( p.x, p.y, y, step ) < y - drop || terrain.solidBetween( p.x, p.y, y + step, y + height );
+				const floor = terrain.floor( p.x, p.y, y, step );
+				if ( floor < y - drop ) return true;
+
+				const wall = ( x, z ) => terrain.solidBetween( x, z, y + step, y + height ) && terrain.solidBetween( x, z, floor + 0.25, floor + 0.5 );
+				if ( ! wall( p.x, p.y ) ) return false;
+				// Obstáculo de uma célula só (resto de enfeite, ponta de doce) não prende o carro.
+				const c = terrain.cell;
+				return wall( p.x + c, p.y ) || wall( p.x - c, p.y ) || wall( p.x, p.y + c ) || wall( p.x, p.y - c );
 
 			},
 		};

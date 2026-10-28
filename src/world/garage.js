@@ -21,7 +21,14 @@ export class Garage {
 		this.lightOn = false;
 
 		this.build();
+		this.moveTo( position );
 
+	}
+
+	// Reposiciona a garagem (e recalcula vaga, entrada e colisores).
+	moveTo( position ) {
+
+		this.object.position.copy( position );
 		const p = position;
 		this.parkSpot = new THREE.Vector3( p.x, 0, p.z - 0.25 );
 		this.entrance = new THREE.Vector3( p.x, 0, p.z + DEPTH / 2 + WALL );
@@ -124,6 +131,8 @@ export class Garage {
 		const ext = add( new THREE.CylinderGeometry( 0.08, 0.08, 0.5, 16 ), red, hw - 0.2, 0.3, 1.5 );
 		ext.name = 'extinguisher';
 
+		this.buildBeacon( trimMat );
+
 		this.updateDoor();
 
 	}
@@ -135,6 +144,52 @@ export class Garage {
 		this.door.position.y = DOOR_H - ( DOOR_H * h ) / 2;
 		this.door.visible = this.doorOpen < 0.999;
 		this.doorTexture.repeat.y = h;
+
+	}
+
+	// Giroflex laranja em cima do portão: gira e pisca enquanto o portão se move (sem luz de verdade,
+	// só material emissivo, para não pesar). Feito de uma cúpula com um "refletor" girando dentro.
+	buildBeacon( baseMaterial ) {
+
+		const beacon = new THREE.Group();
+		beacon.position.set( DOOR_W / 2 - 0.2, HEIGHT + 0.2, DEPTH / 2 + WALL - 0.15 );
+		this.object.add( beacon );
+
+		const base = new THREE.Mesh( new THREE.CylinderGeometry( 0.14, 0.16, 0.08, 16 ), baseMaterial );
+		base.position.y = 0.04;
+		this.beaconLamp = new THREE.MeshStandardMaterial( { color: 0xff8a00, emissive: 0xff7a00, emissiveIntensity: 0, transparent: true, opacity: 0.85, roughness: 0.2 } );
+		const dome = new THREE.Mesh( new THREE.SphereGeometry( 0.12, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2 ), this.beaconLamp );
+		dome.position.y = 0.08;
+		dome.scale.y = 1.6;
+
+		this.beaconSpinner = new THREE.Group();
+		this.beaconSpinner.position.y = 0.16;
+		this.beaconFlash = new THREE.MeshBasicMaterial( { color: 0xffc070, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide } );
+		const reflector = new THREE.Mesh( new THREE.PlaneGeometry( 0.09, 0.14 ), this.beaconFlash );
+		reflector.position.x = 0.05;
+		const beam = new THREE.Mesh( new THREE.PlaneGeometry( 1.4, 0.18 ), this.beaconFlash );
+		beam.position.x = 0.75;
+		this.beaconSpinner.add( reflector, beam );
+
+		beacon.add( base, dome, this.beaconSpinner );
+		this.beaconOn = 0;
+		this.beaconTime = 0;
+
+	}
+
+	// Chamado a cada quadro: liga o giroflex quando o portão está em movimento e desliga aos poucos.
+	animate( dt ) {
+
+		const moving = Math.abs( this.doorOpen - ( this._lastDoor ?? this.doorOpen ) ) > 1e-4;
+		this._lastDoor = this.doorOpen;
+		this.beaconTime = moving ? 1.2 : Math.max( 0, this.beaconTime - dt );
+		this.beaconOn += ( ( this.beaconTime > 0 ? 1 : 0 ) - this.beaconOn ) * Math.min( 1, dt * 6 );
+
+		this.beaconSpinner.rotation.y += dt * 9 * this.beaconOn;
+		const pulse = 0.6 + 0.4 * Math.sin( performance.now() * 0.02 );
+		this.beaconLamp.emissiveIntensity = 2.2 * this.beaconOn * pulse;
+		this.beaconFlash.opacity = 0.9 * this.beaconOn;
+		this.beaconSpinner.visible = this.beaconOn > 0.01;
 
 	}
 

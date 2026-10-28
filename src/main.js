@@ -9,10 +9,12 @@ import { vanellope } from './character/vanellope.js';
 import { Optimus } from './character/Optimus.js';
 import { DANCE } from './character/dance.js';
 import { VAI_TEIA } from './character/vaiTeia.js';
+import { CELEBRATE } from './character/celebrate.js';
 import { Garage } from './world/garage.js';
 import { SugarRush } from './world/sugarRush.js';
-import { LAYOUT } from './world/layout.js';
+import { LAYOUT, ARENA, arenaConeSpots } from './world/layout.js';
 import { createPaddock } from './world/paddock.js';
+import { Cones } from './world/cones.js';
 import { animate, ease, updateTweens, wait } from './utils/tween.js';
 
 const container = document.getElementById( 'container' );
@@ -69,7 +71,32 @@ driveway.position.set( garage.entrance.x, 0.004, garage.entrance.z + 6 );
 driveway.receiveShadow = true;
 scene.add( driveway );
 
-addCones();
+const raceCones = new Cones( coneSpots() );
+const arenaCones = new Cones( arenaConeSpots() );
+arenaCones.object.visible = false;
+scene.add( raceCones.object, arenaCones.object );
+
+// Área aberta (botão "Área aberta" / P): chão cinza com grade, como na primeira versão.
+const arenaGround = new THREE.Group();
+arenaGround.name = 'arena';
+arenaGround.visible = false;
+{
+
+	const ground = new THREE.Mesh( new THREE.PlaneGeometry( 600, 600 ), new THREE.MeshStandardMaterial( { color: 0x3b3e44, roughness: 0.95 } ) );
+	ground.rotation.x = - Math.PI / 2;
+	ground.receiveShadow = true;
+	const grid = new THREE.GridHelper( 600, 300, 0xffffff, 0xffffff );
+	grid.material.opacity = 0.07;
+	grid.material.transparent = true;
+	grid.material.depthWrite = false;
+	grid.position.y = 0.003;
+	arenaGround.add( ground, grid );
+
+}
+scene.add( arenaGround );
+let mode = 'race';
+const cones = () => ( mode === 'race' ? raceCones : arenaCones );
+const SKY = { race: { color: 0xbfe6f2, near: 260, far: 1200 }, arena: { color: 0x2a2e35, near: 40, far: 140 } };
 
 const worldLimit = LAYOUT.worldLimit;
 const worldBounds = [
@@ -160,6 +187,7 @@ window.addEventListener( 'keydown', ( e ) => {
 
 		if ( e.code === 'KeyC' ) setCameraMode( CAMERA_MODES[ ( CAMERA_MODES.indexOf( cameraMode ) + 1 ) % CAMERA_MODES.length ] );
 		else if ( e.code === 'KeyR' ) actions.transform();
+		else if ( e.code === 'KeyP' ) actions.arena();
 		return;
 
 	}
@@ -176,6 +204,8 @@ window.addEventListener( 'keydown', ( e ) => {
 		case 'KeyF': actions.vehicle(); break;
 		case 'KeyB': actions.dance(); break;
 		case 'KeyV': actions.web(); break;
+		case 'KeyX': actions.glitch(); break;
+		case 'KeyP': actions.arena(); break;
 
 	}
 
@@ -270,7 +300,7 @@ const cameraProbe = new THREE.Vector3();
 function keepCameraClear( from, to ) {
 
 	const terrain = world.terrain;
-	if ( ! terrain ) return to;
+	if ( ! terrain || mode !== 'race' ) return to;
 
 	const steps = Math.ceil( from.distanceTo( to ) / 0.4 );
 	for ( let i = 1; i <= steps; i ++ ) {
@@ -384,6 +414,8 @@ const actions = {
 
 	dance: () => playRoutine( 'dance' ),
 	web: () => playRoutine( 'web' ),
+	glitch: () => glitch(),
+	arena: () => toggleArena(),
 
 	transform() {
 
@@ -424,40 +456,134 @@ function toggleGarageDoor() {
 
 }
 
+// Coreografias por personagem (a tecla B é a dança do Homem-Aranha ou a comemoração da Vanellope).
 const ROUTINES = {
-	dance: { routine: DANCE, audio: new Audio( './audio/spiderman-dance.mp3' ) },
-	web: { routine: VAI_TEIA, audio: new Audio( './audio/vai-teia.wav' ) },
+	dance: { who: 'spiderman', routine: DANCE, audio: new Audio( './audio/spiderman-dance.mp3' ) },
+	web: { who: 'spiderman', routine: VAI_TEIA, audio: new Audio( './audio/vai-teia.wav' ) },
+	celebrate: { who: 'vanellope', routine: CELEBRATE, audio: null },
 };
-for ( const r of Object.values( ROUTINES ) ) r.audio.preload = 'auto';
+for ( const r of Object.values( ROUTINES ) ) if ( r.audio ) r.audio.preload = 'auto';
 let playing = null;
 
 function playRoutine( name ) {
 
 	if ( ! onFoot || busy ) return;
-	if ( hero !== spider ) return toast( 'Essa é do Homem-Aranha' );
+	if ( name === 'dance' && hero.model.id === 'vanellope' ) name = 'celebrate';
+	if ( ROUTINES[ name ].who !== hero.model.id ) return toast( 'Essa é do Homem-Aranha' );
 	const was = playing;
 	if ( hero.dancing ) hero.stopDance();
 	if ( was === name || ! hero.grounded ) return;
 
 	const { routine, audio } = ROUTINES[ name ];
-	audio.currentTime = 0;
 	const started = performance.now();
-	audio.play().catch( () => {} );
+	const elapsed = () => ( performance.now() - started ) / 1000;
+	if ( audio ) {
+
+		audio.currentTime = 0;
+		audio.play().catch( () => {} );
+
+	}
 	playing = name;
-	hero.startDance( () => ( audio.paused ? ( performance.now() - started ) / 1000 : audio.currentTime ), routine );
-	setActiveAction( name, true );
+	hero.startDance( () => ( ! audio || audio.paused ? elapsed() : audio.currentTime ), routine );
+	setActiveAction( name === 'celebrate' ? 'dance' : name, true );
 
 }
 
-spider.onDanceEnd = () => {
+for ( const h of heroes ) h.onDanceEnd = () => {
 
-	ROUTINES[ playing ]?.audio.pause();
-	if ( playing ) setActiveAction( playing, false );
+	ROUTINES[ playing ]?.audio?.pause();
+	if ( playing ) setActiveAction( playing === 'celebrate' ? 'dance' : playing, false );
 	playing = null;
 
 };
 
 spider.onRoutineEvent = ( name ) => name === 'web' && shootWeb();
+
+// Glitch da Vanellope: ela "falha" como um bug de videogame (pisca, treme, muda de cor) e
+// reaparece alguns metros à frente.
+const GLITCH_DISTANCE = 4;
+const GLITCH_COLORS = [ new THREE.Color( 0x00fff0 ), new THREE.Color( 0xff2bd6 ), new THREE.Color( 0x6b5bff ) ];
+let glitching = false;
+
+function glitch() {
+
+	if ( ! onFoot || busy || glitching ) return;
+	if ( hero.model.id !== 'vanellope' ) return toast( 'Só a Vanellope sabe dar glitch' );
+
+	const who = hero;
+	who.stopDance();
+	glitching = true;
+	setActiveAction( 'glitch', true );
+
+	const materials = new Set();
+	who.object.traverse( ( o ) => o.isMesh && materials.add( o.material ) );
+	const saved = [ ...materials ].map( ( m ) => [ m, m.emissive.clone(), m.emissiveIntensity ] );
+	let jumped = false;
+
+	return animate( {
+		key: 'glitch', from: 0, to: 1, duration: 0.75, easing: ease.linear,
+		onUpdate: ( v ) => {
+
+			const strength = Math.sin( Math.PI * v );
+			const flicker = Math.random();
+			who.body.position.x = ( Math.random() - 0.5 ) * 0.25 * strength;
+			who.body.position.z = ( Math.random() - 0.5 ) * 0.25 * strength;
+			who.body.scale.set( 1 + ( Math.random() - 0.5 ) * 0.5 * strength, 1 + ( Math.random() - 0.5 ) * 0.3 * strength, 1 );
+			who.body.visible = flicker > 0.2 * strength;
+			const color = GLITCH_COLORS[ Math.floor( Math.random() * GLITCH_COLORS.length ) ];
+			for ( const [ m ] of saved ) {
+
+				m.emissive.copy( color );
+				m.emissiveIntensity = flicker < 0.6 ? strength * 1.5 : 0;
+
+			}
+
+			if ( ! jumped && v > 0.45 ) {
+
+				jumped = true;
+				glitchJump( who );
+
+			}
+
+		},
+	} ).then( () => {
+
+		who.body.position.x = who.body.position.z = 0;
+		who.body.scale.set( 1, 1, 1 );
+		who.body.visible = true;
+		for ( const [ m, emissive, intensity ] of saved ) {
+
+			m.emissive.copy( emissive );
+			m.emissiveIntensity = intensity;
+
+		}
+		glitching = false;
+		setActiveAction( 'glitch', false );
+
+	} );
+
+}
+
+// Teleporta para a frente, até onde der (não atravessa paredes nem cai da pista).
+function glitchJump( who ) {
+
+	const from = who.position.clone();
+	const dir = who.forward( new THREE.Vector3() );
+	const blockers = [ ...garage.colliders, ...worldBounds, ...cars.map( ( c ) => c.footprint() ), terrainBlockers.hero ];
+	terrainBlockers.hero.y = from.y;
+
+	let best = 0;
+	for ( let d = 0.5; d <= GLITCH_DISTANCE; d += 0.5 ) {
+
+		who.position.copy( from ).addScaledVector( dir, d );
+		if ( who.collides( blockers ) ) break;
+		best = d;
+
+	}
+
+	who.position.copy( from ).addScaledVector( dir, best );
+
+}
 
 const autobotsAudio = new Audio( './audio/autobots-vamos-rodar.mp3' );
 autobotsAudio.preload = 'auto';
@@ -558,6 +684,32 @@ function steeringGrip( c = car ) {
 
 const seatRay = new THREE.Raycaster();
 
+// Altura do assoalho na frente do banco (no espaço do chassi), onde ficam os pés do piloto. O raio
+// atravessa banco/console e fica com a superfície mais funda até meio metro abaixo do assento.
+function seatFloor( c, seat ) {
+
+	const eye = c.model.cockpitEye;
+	c.chassis.updateWorldMatrix( true, true );
+	let floor = null;
+
+	for ( const dz of [ 0.6, 0.9 ] ) {
+
+		seatRay.set( c.chassis.localToWorld( new THREE.Vector3( eye.x, eye.y - 0.3, eye.z - dz ) ), new THREE.Vector3( 0, - 1, 0 ).transformDirection( c.chassis.matrixWorld ) );
+		seatRay.far = 1.5;
+		for ( const h of seatRay.intersectObject( c.root, true ) ) {
+
+			if ( ! h.object.visible || ! h.object.material.visible || h.object.isSkinnedMesh ) continue;
+			const y = c.chassis.worldToLocal( h.point.clone() ).y;
+			if ( y > seat.y - 0.5 && ( floor === null || y < floor ) ) floor = y;
+
+		}
+
+	}
+
+	return floor;
+
+}
+
 function seatPosition( c ) {
 
 	const eye = c.model.cockpitEye;
@@ -592,7 +744,8 @@ function enterCar( next ) {
 		if ( near && ! next.isDoorOpen( 'left' ) ) await next.setDoor( 'left', true );
 
 		hero.stopDance();
-		hero.sit( next.chassis, seatPosition( next ) );
+		const seat = seatPosition( next );
+		hero.sit( next.chassis, seat, seatFloor( next, seat ) );
 		hero.seatedIn = next;
 		onFoot = false;
 		car = next;
@@ -899,7 +1052,8 @@ function selectCar( next ) {
 
 			car.speed = 0;
 			car = next;
-			hero.sit( car.chassis, seatPosition( car ) );
+			const seat = seatPosition( car );
+			hero.sit( car.chassis, seat, seatFloor( car, seat ) );
 			hero.seatedIn = car;
 			lastCarPosition.copy( car.position );
 			syncPanel();
@@ -1092,7 +1246,8 @@ document.querySelectorAll( '[data-action]' ).forEach( ( button ) => {
 
 	button.addEventListener( 'click', () => {
 
-		if ( piloting === ( button.dataset.action === 'transform' ) ) actions[ button.dataset.action ]();
+		const action = button.dataset.action;
+		if ( action === 'arena' || piloting === ( action === 'transform' ) ) actions[ action ]();
 		button.blur();
 
 	} );
@@ -1138,6 +1293,8 @@ function updateActionLabels() {
 	if ( onFoot ) setLabel( 'garage', garage.doorTarget ? 'Fechar portão' : 'Abrir portão' );
 	else setLabel( 'garage', garage.contains( car.position ) ? 'Sair da garagem' : 'Ir para a garagem' );
 	setLabel( 'vehicle', onFoot ? 'Entrar no carro' : 'Sair do carro' );
+	setLabel( 'dance', hero === spider ? 'Dançar' : 'Comemorar' );
+	setLabel( 'arena', mode === 'race' ? 'Área aberta' : 'Voltar pra corrida' );
 	setLabel( 'transform', optimus.form === 'robot' ? 'Virar caminhão' : optimus.transforming ? 'Transformando…' : 'Transformar' );
 
 }
@@ -1166,35 +1323,36 @@ function updateHUD() {
 
 }
 
-function addCones() {
-
-	const orange = new THREE.MeshStandardMaterial( { color: 0xff5a00, roughness: 0.6 } );
-	const white = new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0.6 } );
-	const coneGeo = new THREE.ConeGeometry( 0.17, 0.55, 16 );
-	const stripeGeo = new THREE.CylinderGeometry( 0.088, 0.115, 0.1, 16 );
-	const baseGeo = new THREE.BoxGeometry( 0.4, 0.04, 0.4 );
+// Posições do slalom: cones em linha, com um par de "portões" nas pontas.
+function coneSpots() {
 
 	const spots = [];
-	const place = ( x, z ) => spots.push( [ x, z ] );
-
-	// Slalom no gramado: cones em linha, com um par de "portões" nas pontas.
 	const { from, to, spacing, weave } = LAYOUT.cones;
 	const length = from.distanceTo( to );
 	const along = to.clone().sub( from ).normalize();
 	const side = new THREE.Vector3( - along.z, 0, along.x );
-	for ( let d = 0; d <= length; d += spacing ) place( from.x + along.x * d, from.z + along.z * d );
-	for ( const end of [ from, to ] ) for ( const s of [ - 1, 1 ] ) place( end.x + side.x * weave * s, end.z + side.z * weave * s );
+	for ( let d = 0; d <= length; d += spacing ) spots.push( [ from.x + along.x * d, from.z + along.z * d ] );
+	for ( const end of [ from, to ] ) for ( const s of [ - 1, 1 ] ) spots.push( [ end.x + side.x * weave * s, end.z + side.z * weave * s ] );
+	return spots;
 
-	const matrix = new THREE.Matrix4();
-	for ( const [ geometry, material, y ] of [ [ coneGeo, orange, 0.3 ], [ stripeGeo, white, 0.33 ], [ baseGeo, orange, 0.02 ] ] ) {
+}
 
-		const parts = new THREE.InstancedMesh( geometry, material, spots.length );
-		spots.forEach( ( [ x, z ], i ) => parts.setMatrixAt( i, matrix.makeTranslation( x, y, z ) ) );
-		parts.castShadow = parts.receiveShadow = true;
-		parts.computeBoundingSphere();
-		scene.add( parts );
+// Quem pode derrubar cones: carros (um círculo no meio e outro na frente), personagens e Optimus.
+const movers = [];
+function coneMovers() {
+
+	movers.length = 0;
+	for ( const c of cars ) {
+
+		const forward = c.forward( new THREE.Vector3() );
+		movers.push( { position: c.position, radius: c.model.halfWidth + 0.2, speed: c.speed, forward } );
+		movers.push( { position: c.position.clone().addScaledVector( forward, Math.sign( c.speed || 1 ) * c.model.halfLength * 0.6 ), radius: c.model.halfWidth, speed: c.speed, forward } );
 
 	}
+	for ( const h of heroes ) if ( ! h.seatedIn ) movers.push( { position: h.position, radius: 0.35, speed: h.speed, forward: h.forward( new THREE.Vector3() ) } );
+	const big = optimus.form === 'truck' ? 1.4 : 1.2;
+	movers.push( { position: optimus.position, radius: big, speed: optimus.speed, forward: optimus.forward( new THREE.Vector3() ) } );
+	return movers;
 
 }
 
@@ -1312,12 +1470,13 @@ const terrainBlockers = {};
 function placeOnTrack() {
 
 	const terrain = world.terrain;
-	Object.assign( terrainBlockers, {
+	Object.assign( raceBlockers, {
 		car: terrain.blocker( { step: 1.2, drop: 1.5, height: 1.3 } ),
 		hero: terrain.blocker( { step: 0.6, drop: 1.2, height: 1.7 } ),
 		truck: terrain.blocker( { step: 1.4, drop: 1.8, height: 3.2 } ),
 		robot: terrain.blocker( { step: 2, drop: 2, height: 3 } ),
 	} );
+	Object.assign( terrainBlockers, raceBlockers );
 
 	// Todos nascem na praça (a ponte do arco-íris passa por cima dela, por isso a referência é a praça).
 	const plazaY = world.plaza.max.y;
@@ -1328,7 +1487,76 @@ function placeOnTrack() {
 
 	}
 
-	scene.add( createPaddock( LAYOUT, plazaY ) );
+	paddock = createPaddock( LAYOUT, plazaY );
+	scene.add( paddock );
+
+}
+
+// Na área aberta não há relevo: os "colisores de terreno" não bloqueiam nada.
+const raceBlockers = {};
+const openBlocker = () => ( { y: 0, containsPoint: () => false } );
+const openBlockers = { car: openBlocker(), hero: openBlocker(), truck: openBlocker(), robot: openBlocker() };
+let paddock = null;
+
+// Leva tudo (carros, personagens, Optimus, garagem e cones) da pista para a área aberta, ou de volta.
+function toggleArena() {
+
+	if ( busy ) return toast( 'Aguarde' );
+	if ( optimus.transforming ) return toast( 'Aguarde a transformação terminar' );
+
+	mode = mode === 'race' ? 'arena' : 'race';
+	const arena = mode === 'arena';
+	const layout = arena ? ARENA : LAYOUT;
+	const terrain = arena ? null : world.terrain;
+	const groundAt = ( p ) => ( arena ? 0 : terrain.height( p.x, p.z, world.plaza.max.y, 1 ) );
+
+	world.object.visible = ! arena;
+	if ( paddock ) paddock.visible = ! arena;
+	arenaGround.visible = arena;
+	raceCones.object.visible = ! arena;
+	arenaCones.object.visible = arena;
+	const sky = SKY[ mode ];
+	scene.background.set( sky.color );
+	scene.fog.color.set( sky.color );
+	scene.fog.near = sky.near;
+	scene.fog.far = sky.far;
+	Object.assign( terrainBlockers, arena ? openBlockers : raceBlockers );
+
+	const place = ( thing, spot ) => {
+
+		thing.object.position.set( spot.position.x, 0, spot.position.z );
+		thing.object.position.y = groundAt( thing.object.position );
+		thing.object.rotation.y = spot.yaw;
+
+	};
+
+	for ( const c of cars ) {
+
+		Object.assign( c, { terrain, speed: 0, velocityY: 0, autopilot: null } );
+		c.tilt.rotation.set( 0, 0, 0 );
+		place( c, layout.cars[ c.model.id ] );
+
+	}
+
+	for ( const h of heroes ) {
+
+		h.terrain = terrain;
+		if ( h.seatedIn ) continue;
+		h.stopDance();
+		Object.assign( h, { speed: 0, velocityY: 0, grounded: true } );
+		place( h, layout.characters[ h.model.id ] );
+
+	}
+
+	Object.assign( optimus, { terrain, speed: 0, velocityY: 0 } );
+	optimus.body.rotation.set( 0, 0, 0 );
+	place( optimus, layout.optimus );
+
+	garage.moveTo( layout.garage );
+	driveway.position.set( garage.entrance.x, 0.004, garage.entrance.z + 6 );
+
+	setCameraMode( cameraMode );
+	toast( arena ? 'Área aberta: tudo plano e sem obstáculos (P volta para a corrida)' : 'De volta à pista Sugar Rush' );
 
 }
 
@@ -1393,6 +1621,8 @@ function frame( dt ) {
 	}
 	for ( const c of cars ) if ( c !== driven ) c.update( dt, IDLE_INPUT );
 
+	garage.animate( dt );
+	cones().update( dt, coneMovers() );
 	if ( garage.update( t ) ) toast( onFoot ? 'Portão reaberto: tem alguém embaixo' : 'Portão reaberto: carro embaixo do portão' );
 	updateCamera( dt );
 
@@ -1416,7 +1646,12 @@ window.addEventListener( 'resize', () => {
 } );
 
 window.app = {
-	scene, camera, garage, controls, THREE, actions, cars, heroes, optimus, renderer, world,
+	scene, camera, garage, controls, THREE, actions, cars, heroes, optimus, renderer, world, raceCones, arenaCones,
+	get mode() {
+
+		return mode;
+
+	},
 	get hero() {
 
 		return hero;

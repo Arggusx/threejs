@@ -47,8 +47,11 @@ Abra http://localhost:5173. Para gerar a versão de produção: `npm run build` 
 | `Shift` | Correr (a pé) |
 | `Espaço` | Pular (a pé) / freio de mão |
 | `F` | Entrar no carro mais próximo / sair do carro |
-| `B` | Dançar (a pé) — a dança do meme do Homem-Aranha, com música; qualquer movimento interrompe |
-| `V` | "Vai, teia!" (a pé) — dispara uma teia do pulso, com a fala |
+| `B` | Homem-Aranha: dança do meme, com música · Vanellope: comemoração (pula e soca o ar); qualquer movimento interrompe |
+| `V` | "Vai, teia!" (Homem-Aranha a pé) — dispara uma teia do pulso, com a fala |
+| `X` | Glitch (Vanellope a pé) — ela "falha" como um bug de videogame e reaparece até 4 m à frente |
+| `Shift` no Candy Kart | Glitch boost — turbo até ~120 km/h, com faíscas de doce e o kart piscando em neon |
+| `P` | Área aberta ↔ pista: leva tudo para um chão plano sem obstáculos (como na primeira versão) e de volta |
 | `Q` / `E` | Abrir/fechar porta esquerda/direita (carro parado) |
 | `G` | Ir para a garagem / sair da garagem (piloto automático); a pé, abre/fecha o portão |
 | `L` | Faróis |
@@ -64,7 +67,7 @@ com o nome que aparece sobre ele) ou pelo seletor **Controle** no painel. O carr
 **Vanellope:** escolha-a em **Controle** no painel. Ela anda, corre e pula como o Homem-Aranha e entra em
 qualquer carro (o kart dela fica na primeira vaga; ele não tem portas, então ela entra direto). Ao trocar de
 personagem, o outro fica onde estava — a pé ou sentado no carro, parado — e não dá para entrar num carro em que
-o outro está sentado. Dançar e "vai, teia!" são só do Homem-Aranha. O modelo dela não tem esqueleto (é uma
+o outro está sentado. Ela tem a comemoração (`B`) e o glitch (`X`); a dança e o "vai, teia!" são do Homem-Aranha. O modelo dela não tem esqueleto (é uma
 estátua em pose "A"): `character/autoRig.js` cria ossos com os nomes do Mixamo nas posições medidas na malha e
 distribui os pesos dos vértices por região (cabeça, tronco, braços, pernas), então `Character.js` anima os dois
 personagens com o mesmo código.
@@ -102,6 +105,29 @@ praça de largada ao gramado (160 m, ~11°).
 - Carros e o Optimus caminhão inclinam conforme o relevo (frente/trás e lados); o Homem-Aranha pula e
   cai com gravidade a partir do chão onde está.
 - A câmera de perseguição usa o mesmo mapa para não entrar nas paredes.
+- Paredes e encostas são amostradas ponto a ponto na superfície (marcar a faixa inteira de altura de uma
+  encosta grande criava paredes invisíveis em cima da pista). Um obstáculo só bloqueia se começa no chão
+  (algo entre 25 e 50 cm acima do piso) e ocupa mais de uma célula: doces e faixas flutuando sobre a pista e
+  pontas soltas de enfeites são atravessados, como na pista de kart original.
+
+**Área aberta** (`P` ou o botão no painel): esconde o cenário de doces e mostra o chão cinza com grade da
+primeira versão, sem relevo nem obstáculos; carros, personagens, Optimus, garagem e cones vão para as posições de
+`ARENA` em `world/layout.js`. `P` de novo leva tudo de volta para a praça de largada.
+
+### Animações de cada objeto
+
+| Objeto | Animações |
+| --- | --- |
+| Homem-Aranha | andar/correr, pular, sentar e dirigir, dança, "vai, teia!" |
+| Vanellope | andar/correr, pular, sentar e dirigir, comemoração, glitch |
+| Optimus | transformar/destransformar, andar como robô, caminhão (rodas girando e inclinação) |
+| Ferrari, Porsche, Audi | portas, rodas e direção, carroceria inclinando, faróis e pisca |
+| Candy Kart | rodas e direção, aerofólio que levanta em alta velocidade, glitch boost, efeito gelatina (estica e achata nas arrancadas, freadas e quedas) |
+| Garagem | portão, luz interna, giroflex que gira e pisca enquanto o portão se move |
+| Cones | balançam quando algo passa perto, caem rolando quando atingidos, voltam ao lugar depois de 6 s |
+
+Ao sentar, as pernas do piloto se ajustam ao assoalho de cada carro (o joelho estica até o pé ficar acima
+dele), então os pés não atravessam o chão do carro.
 
 A garagem fica no gramado, no pé da rampa; "Ir para a garagem" só funciona chegando perto dela (o piloto
 automático não desvia do relevo).
@@ -137,6 +163,7 @@ src/
     spiderman.js        dados do modelo do Homem-Aranha
     dance.js            coreografia do meme (quadros-chave copiados do vídeo de referência)
     vaiTeia.js          animação do "vai, teia!" (disparo de teia sincronizado com a fala)
+    celebrate.js        comemoração da Vanellope (pulo com os braços para cima)
     vanellope.js        dados da Vanellope: medidas do corpo e regras de peso para o rig gerado
     autoRig.js          cria um esqueleto Mixamo para modelos estáticos e transforma em SkinnedMesh
     Optimus.js          Optimus Prime: direção como caminhão, transformação e caminhada como robô
@@ -150,7 +177,8 @@ src/
       audi.js           o que é específico do Audi
       vanellopeKart.js  o kart da Vanellope (sem portas, volante "invisível" para as mãos do piloto)
   world/
-    garage.js           garagem com portão basculante, iluminação interna e colisores
+    garage.js           garagem com portão basculante, iluminação interna, giroflex e colisores
+    cones.js            cones animados (balançar, cair e voltar ao lugar)
     sugarRush.js        cenário de doces: escala, materiais e grade de obstáculos
     terrain.js          mapa de alturas em camadas + obstáculos por altura (física com relevo)
     ramp.js             rampa da praça de largada até o gramado

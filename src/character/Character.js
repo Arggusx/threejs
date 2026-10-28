@@ -195,9 +195,12 @@ export class Character {
 
 	}
 
-	sit( parent, hips ) {
+	// `floor`: altura do assoalho do carro no espaço de `parent` (se souber), para as pernas não
+	// atravessarem: o joelho vai esticando até o pé ficar acima dele.
+	sit( parent, hips, floor = null ) {
 
 		this.seated = true;
+		this._legPose = { thigh: 1.35, knee: - 1.0, foot: 0.35 };
 		this.speed = 0;
 		this.velocityY = 0;
 		this.grounded = true;
@@ -210,6 +213,34 @@ export class Character {
 		this.object.updateMatrixWorld( true );
 
 		this.object.position.copy( hips ).sub( this.boneLocal( this.bones.Hips ) );
+		if ( floor !== null ) this.fitLegs( parent, floor );
+
+	}
+
+	fitLegs( parent, floor ) {
+
+		const foot = new THREE.Vector3();
+		const above = () => {
+
+			this.animate( 0 );
+			this.object.updateMatrixWorld( true );
+			const lowest = Math.min(
+				parent.worldToLocal( this.bones.LeftFoot.getWorldPosition( foot ) ).y,
+				parent.worldToLocal( this.bones.RightFoot.getWorldPosition( foot ) ).y
+			);
+			return lowest - this.ankleHeight * 0.6 >= floor;
+
+		};
+
+		const pose = this._legPose;
+		for ( const thigh of [ 1.35, 1.5, 1.65 ] ) for ( let knee = - 1.0; knee <= 0.001; knee += 0.1 ) {
+
+			pose.thigh = thigh;
+			pose.knee = knee;
+			pose.foot = 0.35 * - knee;
+			if ( above() ) return;
+
+		}
 
 	}
 
@@ -261,6 +292,7 @@ export class Character {
 				this.speed = 0;
 				this.animate( dt );
 				this.plantFoot( colliders );
+				this.body.position.y += this._pose.lift ?? 0;
 				return;
 
 			}
@@ -460,9 +492,10 @@ export class Character {
 
 		for ( const side of [ 'Left', 'Right' ] ) {
 
-			this.rotate( b[ `${ side }UpLeg` ], AXIS_X, 1.35 );
-			this.rotate( b[ `${ side }Leg` ], AXIS_X, - 1.0 );
-			this.rotate( b[ `${ side }Foot` ], AXIS_X, 0.35 );
+			const legs = this._legPose;
+			this.rotate( b[ `${ side }UpLeg` ], AXIS_X, legs.thigh );
+			this.rotate( b[ `${ side }Leg` ], AXIS_X, legs.knee );
+			this.rotate( b[ `${ side }Foot` ], AXIS_X, legs.foot );
 
 		}
 
