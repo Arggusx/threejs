@@ -9,6 +9,9 @@ import { Optimus } from './character/Optimus.js';
 import { DANCE } from './character/dance.js';
 import { VAI_TEIA } from './character/vaiTeia.js';
 import { Garage } from './world/garage.js';
+import { SugarRush } from './world/sugarRush.js';
+import { LAYOUT } from './world/layout.js';
+import { createPaddock } from './world/paddock.js';
 import { animate, ease, updateTweens, wait } from './utils/tween.js';
 
 const container = document.getElementById( 'container' );
@@ -23,15 +26,15 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild( renderer.domElement );
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color( 0x2a2e35 );
-scene.fog = new THREE.Fog( 0x2a2e35, 40, 140 );
+scene.background = new THREE.Color( 0xbfe6f2 );
+scene.fog = new THREE.Fog( 0xbfe6f2, 260, 1200 );
 
 const environment = new HDRLoader().load( './textures/venice_sunset_1k.hdr' );
 environment.mapping = THREE.EquirectangularReflectionMapping;
 scene.environment = environment;
 scene.environmentIntensity = 0.9;
 
-const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.05, 400 );
+const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.05, 2500 );
 camera.position.set( 4.25, 1.4, - 4.5 );
 
 const controls = new OrbitControls( camera, renderer.domElement );
@@ -50,22 +53,10 @@ sun.shadow.camera.far = 80;
 sun.shadow.bias = - 0.0004;
 scene.add( sun, sun.target );
 
-const ground = new THREE.Mesh(
-	new THREE.PlaneGeometry( 600, 600 ),
-	new THREE.MeshStandardMaterial( { color: 0x3b3e44, roughness: 0.95 } )
-);
-ground.rotation.x = - Math.PI / 2;
-ground.receiveShadow = true;
-scene.add( ground );
+const world = new SugarRush();
+scene.add( world.object );
 
-const grid = new THREE.GridHelper( 600, 300, 0xffffff, 0xffffff );
-grid.material.opacity = 0.07;
-grid.material.transparent = true;
-grid.material.depthWrite = false;
-grid.position.y = 0.003;
-scene.add( grid );
-
-const garage = new Garage();
+const garage = new Garage( LAYOUT.garage );
 scene.add( garage.object );
 
 const driveway = new THREE.Mesh(
@@ -79,7 +70,7 @@ scene.add( driveway );
 
 addCones();
 
-const worldLimit = 280;
+const worldLimit = LAYOUT.worldLimit;
 const worldBounds = [
 	new THREE.Box2( new THREE.Vector2( - 400, - 400 ), new THREE.Vector2( 400, - worldLimit ) ),
 	new THREE.Box2( new THREE.Vector2( - 400, worldLimit ), new THREE.Vector2( 400, 400 ) ),
@@ -87,16 +78,10 @@ const worldBounds = [
 	new THREE.Box2( new THREE.Vector2( worldLimit, - 400 ), new THREE.Vector2( 400, 400 ) ),
 ];
 
-const START = {
-	porsche: { position: new THREE.Vector3( 0, 0, 0 ), yaw: 0 },
-	ferrari: { position: new THREE.Vector3( - 4.5, 0, 0 ), yaw: 0 },
-	audi: { position: new THREE.Vector3( - 9.0, 0, 0 ), yaw: 0 },
-};
-
 const cars = Object.values( CAR_MODELS ).map( ( model ) => {
 
 	const c = new Car( model );
-	const start = START[ model.id ] ?? { position: new THREE.Vector3(), yaw: 0 };
+	const start = LAYOUT.cars[ model.id ] ?? { position: new THREE.Vector3(), yaw: 0 };
 	c.object.position.copy( start.position );
 	c.object.rotation.y = start.yaw;
 	scene.add( c.object );
@@ -107,20 +92,22 @@ const cars = Object.values( CAR_MODELS ).map( ( model ) => {
 let car = cars.find( ( c ) => c.model.id === 'porsche' ) ?? cars[ 0 ];
 
 const hero = new Character( spiderman );
-hero.object.position.set( 2.4, 0, 3.2 );
+hero.object.position.copy( LAYOUT.characters.spiderman.position );
+hero.object.rotation.y = LAYOUT.characters.spiderman.yaw;
 scene.add( hero.object );
 let onFoot = true;
 
 // O Optimus fica no mundo à parte: não colide com os carros (nem eles com ele).
 const optimus = new Optimus();
-optimus.object.position.set( 9, 0, 1 );
+optimus.object.position.copy( LAYOUT.optimus.position );
+optimus.object.rotation.y = LAYOUT.optimus.yaw;
 scene.add( optimus.object );
 let piloting = false;
 
 const controlled = () => ( piloting ? optimus : onFoot ? hero : car );
 
 const loadingBar = document.getElementById( 'loading-bar' );
-const loadables = [ ...cars, hero, optimus ];
+const loadables = [ world, ...cars, hero, optimus ];
 const progress = loadables.map( () => 0 );
 
 Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
@@ -130,6 +117,7 @@ Promise.all( loadables.map( ( c, i ) => c.load( ( p ) => {
 
 } ) ) ).then( () => {
 
+	placeOnTrack();
 	for ( const c of cars ) createCarLabel( c );
 	setQuality( QUALITY[ savedQuality ] ? savedQuality : 'alto' );
 	syncPanel();
@@ -246,12 +234,12 @@ function setCameraMode( mode ) {
 		if ( piloting ) {
 
 			const h = optimus.height;
-			controls.target.copy( t.position ).setY( h * 0.5 );
+			controls.target.copy( t.position ).setY( t.position.y + h * 0.5 );
 			camera.position.copy( t.object.localToWorld( tmp.set( h * 1.4, h * 0.8, h * 2.6 ) ) );
 
 		} else {
 
-			controls.target.copy( t.position ).setY( onFoot ? 1.1 : 0.5 );
+			controls.target.copy( t.position ).setY( t.position.y + ( onFoot ? 1.1 : 0.5 ) );
 			camera.position.copy( t.object.localToWorld( onFoot ? tmp.set( 1.6, 2.0, 3.6 ) : tmp.set( 4.5, 1.6, - 4.5 ) ) );
 
 		}
@@ -260,6 +248,27 @@ function setCameraMode( mode ) {
 	}
 
 	setActive( 'camera', mode );
+
+}
+
+const cameraProbe = new THREE.Vector3();
+
+// Puxa a câmera de perseguição para frente quando ela entraria nas ilhas/doces (usa o mapa de
+// obstáculos do terreno em vez de raycast nas malhas, que seria caro a cada quadro).
+function keepCameraClear( from, to ) {
+
+	const terrain = world.terrain;
+	if ( ! terrain ) return to;
+
+	const steps = Math.ceil( from.distanceTo( to ) / 0.4 );
+	for ( let i = 1; i <= steps; i ++ ) {
+
+		cameraProbe.lerpVectors( from, to, i / steps );
+		if ( terrain.solidBetween( cameraProbe.x, cameraProbe.z, cameraProbe.y - 0.4, cameraProbe.y + 0.4 ) ) return to.lerpVectors( from, to, Math.max( 0, i - 1.5 ) / steps );
+
+	}
+
+	return to;
 
 }
 
@@ -272,7 +281,7 @@ function updateCamera( dt ) {
 	if ( cameraMode === 'orbit' ) {
 
 		// O Optimus muda de altura ao se transformar; a câmera acompanha.
-		if ( piloting ) delta.y = ( optimus.height * 0.5 - controls.target.y ) * ( 1 - Math.exp( - dt * 2 ) );
+		if ( piloting ) delta.y = ( optimus.position.y + optimus.height * 0.5 - controls.target.y ) * ( 1 - Math.exp( - dt * 2 ) );
 		camera.position.add( delta );
 		controls.target.add( delta );
 		if ( piloting ) {
@@ -287,7 +296,7 @@ function updateCamera( dt ) {
 	} else if ( piloting && cameraMode === 'chase' ) {
 
 		const h = optimus.height;
-		const desired = optimus.object.localToWorld( tmp.set( 0, h * 0.9, h * 2.2 ) );
+		const desired = keepCameraClear( optimus.object.localToWorld( new THREE.Vector3( 0, h * 0.6, 0 ) ), optimus.object.localToWorld( tmp.set( 0, h * 0.9, h * 2.2 ) ) );
 		camera.position.lerp( desired, 1 - Math.exp( - dt * 4 ) );
 		camera.lookAt( optimus.object.localToWorld( tmp.set( 0, h * 0.55, - h ) ) );
 
@@ -299,9 +308,9 @@ function updateCamera( dt ) {
 
 	} else if ( onFoot && cameraMode === 'chase' ) {
 
-		const desired = hero.object.localToWorld( new THREE.Vector3( 0, 2.1, 3.8 ) ).setY( 2.1 );
+		const desired = keepCameraClear( hero.object.localToWorld( new THREE.Vector3( 0, 1.6, 0 ) ), hero.object.localToWorld( new THREE.Vector3( 0, 2.1, 3.8 ) ).setY( hero.position.y + 2.1 ) );
 		camera.position.lerp( desired, 1 - Math.exp( - dt * 6 ) );
-		camera.lookAt( hero.object.localToWorld( new THREE.Vector3( 0, 1.2, - 2 ) ).setY( 1.2 ) );
+		camera.lookAt( hero.object.localToWorld( new THREE.Vector3( 0, 1.2, - 2 ) ).setY( hero.position.y + 1.2 ) );
 
 	} else if ( onFoot ) {
 
@@ -312,9 +321,10 @@ function updateCamera( dt ) {
 	} else if ( cameraMode === 'chase' ) {
 
 		const inside = garage.contains( car.position );
-		const desired = car.object.localToWorld( new THREE.Vector3( 0, inside ? 1.9 : 1.7, inside ? 3.8 : 6.2 ) );
+		// Segue a inclinação do carro (car.tilt) para não entrar no chão em subidas/descidas.
+		const desired = keepCameraClear( car.tilt.localToWorld( new THREE.Vector3( 0, 1.2, 0 ) ), car.tilt.localToWorld( new THREE.Vector3( 0, inside ? 1.9 : 2, inside ? 3.8 : 6.2 ) ) );
 		camera.position.lerp( desired, 1 - Math.exp( - dt * 5 ) );
-		camera.lookAt( car.object.localToWorld( new THREE.Vector3( 0, 0.7, - 2 ) ) );
+		camera.lookAt( car.tilt.localToWorld( new THREE.Vector3( 0, 0.7, - 2 ) ) );
 
 	} else {
 
@@ -354,6 +364,7 @@ const actions = {
 		if ( busy ) return;
 		if ( onFoot ) return toggleGarageDoor();
 		if ( garage.contains( car.position ) ) leaveGarage();
+		else if ( car.position.distanceTo( garage.object.position ) > 45 ) toast( 'A garagem fica no gramado, no pé da rampa: chegue mais perto' );
 		else if ( cars.some( ( c ) => c !== car && garage.contains( c.position ) ) ) toast( 'A garagem já está ocupada por outro carro' );
 		else goToGarage();
 
@@ -586,12 +597,14 @@ function exitCar() {
 
 		await car.setDoor( 'left', true );
 
-		const blockers = [ ...garage.colliders, ...worldBounds, ...cars.filter( ( c ) => c !== car ).map( ( c ) => c.footprint() ) ];
+		const ground = terrainBlockers.hero;
+		ground.y = car.position.y;
+		const blockers = [ ...garage.colliders, ...worldBounds, ground, ...cars.filter( ( c ) => c !== car ).map( ( c ) => c.footprint() ) ];
 		const spot = new THREE.Vector3();
 		let yaw = car.yaw + Math.PI / 2;
 		for ( const side of [ - 1, 1 ] ) {
 
-			spot.copy( car.object.localToWorld( new THREE.Vector3( side * ( car.model.halfWidth + 0.55 ), 0, 0.1 ) ) ).setY( 0 );
+			spot.copy( car.object.localToWorld( new THREE.Vector3( side * ( car.model.halfWidth + 0.55 ), 0, 0.1 ) ) ).setY( car.position.y );
 			yaw = car.yaw + side * - Math.PI / 2;
 			hero.position.copy( spot );
 			if ( ! hero.collides( blockers ) ) break;
@@ -945,7 +958,7 @@ function updateCarLabels() {
 
 		if ( ! c.label ) continue;
 
-		labelPosition.copy( c.position ).setY( 1.75 );
+		labelPosition.copy( c.position ).setY( c.position.y + 1.75 );
 		const distance = labelPosition.distanceTo( camera.position );
 		labelPosition.project( camera );
 
@@ -1117,14 +1130,13 @@ function addCones() {
 	const spots = [];
 	const place = ( x, z ) => spots.push( [ x, z ] );
 
-	for ( let i = 0; i < 8; i ++ ) place( - 10, - 8 - i * 12 );
-	for ( let i = 0; i < 48; i ++ ) {
-
-		const a = ( i / 48 ) * Math.PI * 2;
-		place( 30 + Math.cos( a ) * 40, 40 + Math.sin( a ) * 22 );
-		if ( i % 2 === 0 ) place( 30 + Math.cos( a ) * 30, 40 + Math.sin( a ) * 12 );
-
-	}
+	// Slalom no gramado: cones em linha, com um par de "portões" nas pontas.
+	const { from, to, spacing, weave } = LAYOUT.cones;
+	const length = from.distanceTo( to );
+	const along = to.clone().sub( from ).normalize();
+	const side = new THREE.Vector3( - along.z, 0, along.x );
+	for ( let d = 0; d <= length; d += spacing ) place( from.x + along.x * d, from.z + along.z * d );
+	for ( const end of [ from, to ] ) for ( const s of [ - 1, 1 ] ) place( end.x + side.x * weave * s, end.z + side.z * weave * s );
 
 	const matrix = new THREE.Matrix4();
 	for ( const [ geometry, material, y ] of [ [ coneGeo, orange, 0.3 ], [ stripeGeo, white, 0.33 ], [ baseGeo, orange, 0.02 ] ] ) {
@@ -1176,7 +1188,8 @@ function setQuality( name ) {
 
 	}
 
-	for ( const c of cars ) c.setGlassQuality( q.refractiveGlass );
+	refractiveGlass = q.refractiveGlass;
+	updateGlass( true );
 
 	if ( shadowsChanged ) scene.traverse( ( o ) => o.material && [ o.material ].flat().forEach( ( m ) => ( m.needsUpdate = true ) ) );
 
@@ -1220,9 +1233,65 @@ function autoQuality( dt ) {
 
 }
 
+// Vidro com refração faz o three.js desenhar a cena inteira mais uma vez (para o que aparece através
+// do vidro). Com o cenário grande isso pesa, então só o carro perto da câmera usa esse vidro.
+let refractiveGlass = false;
+const GLASS_DISTANCE = 14;
+
+function updateGlass( force = false ) {
+
+	for ( const c of cars ) {
+
+		const want = refractiveGlass && c.position.distanceTo( camera.position ) < GLASS_DISTANCE;
+		if ( force || c.refractive !== want ) {
+
+			c.refractive = want;
+			c.setGlassQuality( want );
+
+		}
+
+	}
+
+}
+
 const staticColliders = [];
 const colliders = [];
 const carFootprints = cars.map( () => new THREE.Box2() );
+
+// Relevo como colisor: cada um tem o seu degrau máximo, queda máxima (beirada) e altura do corpo.
+const terrainBlockers = {};
+
+// Coloca tudo na altura da praça de largada e liga o relevo à física de cada um.
+function placeOnTrack() {
+
+	const terrain = world.terrain;
+	Object.assign( terrainBlockers, {
+		car: terrain.blocker( { step: 1.2, drop: 1.5, height: 1.3 } ),
+		hero: terrain.blocker( { step: 0.6, drop: 1.2, height: 1.7 } ),
+		truck: terrain.blocker( { step: 1.4, drop: 1.8, height: 3.2 } ),
+		robot: terrain.blocker( { step: 2, drop: 2, height: 3 } ),
+	} );
+
+	// Todos nascem na praça (a ponte do arco-íris passa por cima dela, por isso a referência é a praça).
+	const plazaY = world.plaza.max.y;
+	for ( const c of [ ...cars, hero, optimus ] ) {
+
+		c.terrain = terrain;
+		c.object.position.y = terrain.height( c.position.x, c.position.z, plazaY, 1 );
+
+	}
+
+	scene.add( createPaddock( LAYOUT, plazaY ) );
+
+}
+
+function withTerrain( list, blocker, who ) {
+
+	blocker.y = who.position.y;
+	list.push( blocker );
+	return list;
+
+}
 
 function frame( dt ) {
 
@@ -1238,17 +1307,24 @@ function frame( dt ) {
 	colliders.push( ...staticColliders );
 	cars.forEach( ( c, i ) => c !== driven && colliders.push( c.footprint( carFootprints[ i ] ) ) );
 
-	if ( piloting ) optimus.update( dt, optimus.form === 'truck' ? ( busy ? IDLE_INPUT : readInput() ) : readHeroInput( optimus ), staticColliders );
+	const truck = optimus.form === 'truck';
+	if ( piloting ) optimus.update( dt, truck ? ( busy ? IDLE_INPUT : readInput() ) : readHeroInput( optimus ), withTerrain( staticColliders, terrainBlockers[ truck ? 'truck' : 'robot' ], optimus ) );
 	else optimus.update( dt, optimus.form === 'truck' ? IDLE_INPUT : IDLE_HERO_INPUT );
 
 	if ( onFoot ) {
 
 		const i = piloting ? IDLE_HERO_INPUT : readHeroInput();
 		if ( hero.dancing && ( i.move.lengthSq() > 0 || i.turn || i.jump ) ) hero.stopDance();
-		hero.update( dt, i, colliders );
+		hero.update( dt, i, withTerrain( colliders, terrainBlockers.hero, hero ) );
+		colliders.pop();
 
 	}
-	else car.update( dt, busy || piloting ? IDLE_INPUT : readInput(), colliders );
+	else {
+
+		car.update( dt, busy || piloting ? IDLE_INPUT : readInput(), withTerrain( colliders, terrainBlockers.car, car ) );
+		colliders.pop();
+
+	}
 	if ( ! onFoot ) hero.update( dt, { hands: steeringGrip() } );
 	hero.object.visible = piloting || onFoot || cameraMode !== 'cockpit';
 	for ( const c of cars ) if ( c !== driven ) c.update( dt, IDLE_INPUT );
@@ -1256,9 +1332,11 @@ function frame( dt ) {
 	if ( garage.update( t ) ) toast( onFoot ? 'Portão reaberto: tem alguém embaixo' : 'Portão reaberto: carro embaixo do portão' );
 	updateCamera( dt );
 
-	sun.position.copy( t.position ).setY( 0 ).add( tmp.set( 10, 18, 8 ) );
-	sun.target.position.copy( t.position ).setY( 0 );
+	sun.position.copy( t.position ).add( tmp.set( 10, 18, 8 ) );
+	sun.target.position.copy( t.position );
 
+	for ( const c of cars ) c.updateDetail( camera.position );
+	updateGlass();
 	updateHUD();
 	updateCarLabels();
 	renderer.render( scene, camera );
@@ -1274,7 +1352,7 @@ window.addEventListener( 'resize', () => {
 } );
 
 window.app = {
-	scene, camera, garage, controls, THREE, actions, cars, hero, optimus, renderer,
+	scene, camera, garage, controls, THREE, actions, cars, hero, optimus, renderer, world,
 	get onFoot() {
 
 		return onFoot;

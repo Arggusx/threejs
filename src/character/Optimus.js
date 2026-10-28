@@ -25,6 +25,8 @@ export class Optimus {
 		this.object.name = 'optimus';
 
 		this.form = 'truck'; // 'truck' | 'robot' | 'transforming'
+		this.terrain = null;
+		this.velocityY = 0;
 		this.speed = 0;
 		this.steer = 0;
 		this.wheelSpin = 0;
@@ -184,6 +186,7 @@ export class Optimus {
 		this.speed = 0;
 		this.steer = 0;
 		this.body.position.y = 0;
+		this.body.rotation.set( 0, 0, 0 );
 		return true;
 
 	}
@@ -198,12 +201,14 @@ export class Optimus {
 
 			this.drive( dt, input );
 			this.move( dt, colliders );
+			this.followGround( dt );
 			this.spinWheels( dt );
 
 		} else {
 
 			this.walk( dt, input );
 			this.move( dt, colliders );
+			this.followGround( dt );
 			this.animateWalk( dt );
 
 		}
@@ -318,6 +323,50 @@ export class Optimus {
 		}
 
 		return false;
+
+	}
+
+	// Apoia no relevo; como caminhão também inclina a carroceria conforme a pista.
+	followGround( dt ) {
+
+		if ( ! this.terrain ) return;
+
+		const t = this.terrain, p = this.object.position;
+		const step = this.form === 'truck' ? 1.4 : 2;
+		const ground = t.height( p.x, p.z, p.y, step );
+		if ( ground === - Infinity ) return;
+
+		if ( p.y > ground + 0.05 ) {
+
+			this.velocityY -= 22 * dt;
+			p.y = Math.max( ground, p.y + this.velocityY * dt );
+
+		} else {
+
+			this.velocityY = 0;
+			p.y = ground;
+
+		}
+
+		let pitch = 0, roll = 0;
+		if ( this.form === 'truck' ) {
+
+			const s = Math.sin( this.yaw ), c = Math.cos( this.yaw );
+			const at = ( x, z ) => {
+
+				const h = t.height( p.x + x * c + z * s, p.z - x * s + z * c, p.y, step );
+				return h === - Infinity || Math.abs( h - p.y ) > step ? p.y : h;
+
+			};
+			const a = TRUCK.halfLength * 0.8, w = TRUCK.halfWidth;
+			pitch = THREE.MathUtils.clamp( Math.atan2( at( 0, - a ) - at( 0, a ), 2 * a ), - 0.5, 0.5 );
+			roll = THREE.MathUtils.clamp( Math.atan2( at( w, 0 ) - at( - w, 0 ), 2 * w ), - 0.4, 0.4 );
+
+		}
+
+		const k = Math.min( 1, dt * 8 );
+		this.body.rotation.x += ( pitch - this.body.rotation.x ) * k;
+		this.body.rotation.z += ( roll - this.body.rotation.z ) * k;
 
 	}
 

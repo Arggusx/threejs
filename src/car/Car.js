@@ -10,6 +10,10 @@ const MAX_REVERSE = 8;
 const MAX_LATERAL_ACCEL = 14;
 const MAX_AUTOPILOT_YAW_RATE = 1.2;
 const DOOR_ANGLE = THREE.MathUtils.degToRad( 65 );
+const GROUND_STEP = 1.2;
+const DETAIL_RADIUS = 0.4;
+const DETAIL_DISTANCE = 60;
+const GRAVITY = 22;
 
 export const PAINT_FINISHES = {
 	metalico: { metalness: 1, roughness: 0.5, clearcoat: 1, clearcoatRoughness: 0.03, iridescence: 0 },
@@ -65,6 +69,8 @@ export class Car {
 		this.braking = false;
 		this.autopilot = null;
 		this.rideHeight = 0;
+		this.velocityY = 0;
+		this.terrain = null;
 
 		this._roll = 0;
 		this._pitch = 0;
@@ -103,6 +109,13 @@ export class Car {
 			loader.loadAsync( this.model.url, ( e ) => e.total && onProgress?.( e.loaded / e.total ) ),
 			shadowTexture,
 		] );
+
+		// Monta o modelo com o carro na origem: os pivôs das rodas/portas são calculados em espaço
+		// local e sairiam deslocados se o carro já estivesse posicionado no mundo.
+		const placement = { position: this.object.position.clone(), yaw: this.object.rotation.y };
+		this.object.position.set( 0, 0, 0 );
+		this.object.rotation.y = 0;
+		this.object.updateMatrixWorld( true );
 
 		this.model.build( this, gltf );
 		this.interiorBase = this.materials.leather.color.clone();
@@ -144,6 +157,29 @@ export class Car {
 		this.bounds.getCenter( this.hitBox.position );
 		this.hitBox.userData.car = this;
 		this.chassis.add( this.hitBox );
+
+		// Grupo entre o carro e o modelo que inclina conforme o relevo (subida/descida e lateral).
+		this.tilt = new THREE.Group();
+		this.object.add( this.tilt );
+		this.tilt.add( this.root );
+
+		// Peças pequenas (parafusos, interior, emblemas...) só aparecem de perto: de longe não fazem
+		// diferença na tela e custam boa parte dos triângulos do carro. Rodas ficam sempre.
+		this.details = [];
+		const wheelParts = new Set();
+		for ( const w of [ ...this.wheels, ...this.frontPivots ] ) w.traverse( ( o ) => wheelParts.add( o ) );
+		const scale = new THREE.Vector3();
+		this.root.traverse( ( o ) => {
+
+			if ( ! o.isMesh || ! o.visible || wheelParts.has( o ) || o === shadow ) return;
+			if ( ! o.geometry.boundingSphere ) o.geometry.computeBoundingSphere();
+			if ( o.geometry.boundingSphere.radius * o.getWorldScale( scale ).x < DETAIL_RADIUS ) this.details.push( o );
+
+		} );
+		this.detailed = true;
+
+		this.object.position.copy( placement.position );
+		this.object.rotation.y = placement.yaw;
 
 		return this;
 
@@ -429,6 +465,7 @@ export class Car {
 
 		}
 
+		this.followGround( dt );
 		this.updateVisuals( dt );
 
 	}
@@ -582,7 +619,7 @@ export class Car {
 		const yaw = Math.atan2( - tangent.x, - tangent.z );
 		const dYaw = Math.atan2( Math.sin( yaw - prevYaw ), Math.cos( yaw - prevYaw ) );
 
-		this.object.position.set( point.x, 0, point.z );
+		this.object.position.set( point.x, this.object.position.y, point.z );
 		this.object.rotation.y = prevYaw + dYaw;
 		this.speed = ap.reverse ? - v : v;
 		this.braking = remaining < 1.5;
@@ -602,6 +639,56 @@ export class Car {
 			ap.resolve();
 
 		}
+
+	}
+
+	updateDetail( cameraPosition ) {
+
+		const near = this.object.position.distanceToSquared( cameraPosition ) < DETAIL_DISTANCE * DETAIL_DISTANCE;
+		if ( near === this.detailed ) return;
+		this.detailed = near;
+		for ( const m of this.details ) m.visible = near;
+
+	}
+
+	// Apoia o carro no terreno: altura pelo centro e inclinação pelas quatro "rodas".
+	followGround( dt ) {
+
+		if ( ! this.terrain ) return;
+
+		const t = this.terrain, p = this.object.position;
+		const ground = t.height( p.x, p.z, p.y, GROUND_STEP );
+		if ( ground === - Infinity ) return;
+		// O piloto automático não desvia de beiradas: nesse caso o carro mantém a altura.
+		if ( this.autopilot && ground < p.y - 1.5 ) return;
+
+		if ( p.y > ground + 0.05 ) {
+
+			this.velocityY -= GRAVITY * dt;
+			p.y = Math.max( ground, p.y + this.velocityY * dt );
+
+		} else {
+
+			this.velocityY = 0;
+			p.y = ground;
+
+		}
+
+		const a = this.model.wheelbase / 2, w = this.model.halfWidth;
+		const s = Math.sin( this.yaw ), c = Math.cos( this.yaw );
+		const at = ( x, z ) => {
+
+			// Amostras que caem fora do chão (beirada, borda elevada) não inclinam o carro.
+			const h = t.height( p.x + x * c + z * s, p.z - x * s + z * c, p.y, GROUND_STEP );
+			return h === - Infinity || Math.abs( h - p.y ) > GROUND_STEP ? p.y : h;
+
+		};
+
+		const pitch = THREE.MathUtils.clamp( Math.atan2( at( 0, - a ) - at( 0, a ), 2 * a ), - 0.5, 0.5 );
+		const roll = THREE.MathUtils.clamp( Math.atan2( at( w, 0 ) - at( - w, 0 ), 2 * w ), - 0.4, 0.4 );
+		const k = Math.min( 1, dt * 10 );
+		this.tilt.rotation.x += ( pitch - this.tilt.rotation.x ) * k;
+		this.tilt.rotation.z += ( roll - this.tilt.rotation.z ) * k;
 
 	}
 

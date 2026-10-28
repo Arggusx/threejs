@@ -9,6 +9,7 @@ const TURN_RATE = 12;
 const GRAVITY = 22;
 const JUMP_SPEED = 7.5;
 const RADIUS = 0.3;
+const STEP = 0.6;
 const GRIP_SIGN = 1;
 
 const AXIS_X = new THREE.Vector3( 1, 0, 0 );
@@ -304,23 +305,45 @@ export class Character {
 
 		this._jumpHeld = !! input.jump;
 
-		if ( ! this.grounded ) {
+		this.move( dt, colliders );
+		this.fall( dt );
+		this.animate( dt );
 
-			this.velocityY -= GRAVITY * dt;
-			this.object.position.y += this.velocityY * dt;
+	}
 
-			if ( this.object.position.y <= 0 ) {
+	groundHeight() {
 
-				this.object.position.y = 0;
-				this.velocityY = 0;
-				this.grounded = true;
+		const p = this.object.position;
+		const h = this.terrain ? this.terrain.height( p.x, p.z, p.y, STEP ) : 0;
+		return h === - Infinity ? p.y : h;
 
-			}
+	}
+
+	// Gravidade e apoio no chão (que pode ter relevo: pista, rampa, gramado).
+	fall( dt ) {
+
+		const pos = this.object.position;
+		const ground = this.groundHeight();
+
+		if ( this.grounded && pos.y - ground > 0.35 ) this.grounded = false;
+
+		if ( this.grounded ) {
+
+			pos.y = ground;
+			return;
 
 		}
 
-		this.move( dt, colliders );
-		this.animate( dt );
+		this.velocityY -= GRAVITY * dt;
+		pos.y += this.velocityY * dt;
+
+		if ( pos.y <= ground ) {
+
+			pos.y = ground;
+			this.velocityY = 0;
+			this.grounded = true;
+
+		}
 
 	}
 
