@@ -7,6 +7,15 @@ mundo de doces no estilo Sugar Rush: carros, Homem-Aranha e Optimus começam na 
 em cima da pista (a ~30 m do gramado), e dá para dirigir/andar por toda a pista — subidas, descidas, pontes —
 ou descer a rampa até o gramado, onde ficam a garagem e um slalom de cones.
 
+## Versões online
+
+| Ambiente | Branch | Link | O que tem |
+| --- | --- | --- | --- |
+| Produção | `main` | [threejs-29wh.vercel.app](https://threejs-29wh.vercel.app) | Versão estável: garagem com **Ferrari 458**, **Porsche 911 GT3 R** e **Audi RS6 Avant**, dirigidos um de cada vez; portas, faróis, pisca-alerta, piloto automático até a garagem, três câmeras e personalização no painel (pintura, rodas, pinças, aerofólio, vidros, couro e suspensão) |
+| Homologação (hml) | `develop` | [threejs-29wh-hml.vercel.app](https://threejs-29wh-hml.vercel.app) | Tudo da produção e mais as features em teste: **Homem-Aranha** jogável (anda, corre, pula, entra e dirige qualquer carro, dança do meme com música e "vai, teia!"), **Vanellope** com o **Candy Kart** (comemoração, glitch e glitch boost), **Optimus Prime** com transformação caminhão ↔ robô, mapa **Sugar Rush** com relevo e pontes (`P` alterna para a área aberta), cones animados, qualidade gráfica Baixo/Médio/Alto automática e modelos comprimidos |
+
+As features entram primeiro na `develop` (hml) e, depois de testadas, vão para a `main` (produção).
+
 Modelos:
 
 - **Ferrari 458 Italia** de [vicent091036](https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6),
